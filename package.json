@@ -1,0 +1,13 @@
+{
+    "name": "houseworks-app",
+    "version": "0.0.1",
+    "description": "App em Node.js/Express",
+    "main": "app.js",
+    "scripts": {
+      "start": "node app.js"
+    },
+    "dependencies": {
+      "express": "^4.17.1"
+    }
+  }
+  
