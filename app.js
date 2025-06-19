@@ -1,12 +1,20 @@
 // app.js
 const express = require('express');
+const config = require('./config'); // Importa as configurações globais
+const connectDB = require('./config/db'); // Importa a função de conexão com o DB
+const routes = require('./routes'); // Importa as rotas centralizadas
+
+// Inicialização do App Express
 const app = express();
-const port = 3000;
 
-app.get('/', (req, res) => {
-  res.send('Hello Docker Compose from Node.js Express App!');
-});
+// Middlewares
+app.use(express.json());
 
-app.listen(port, () => {
-  console.log(`Aplicativo Express escutando na porta ${port}`);
-});
+// Conexão com o MongoDB
+connectDB();
+
+// Usar as rotas
+app.use('/', routes);
+
+
+module.exports = app; // Exporta o aplicativo Express para ser usado por server.js
