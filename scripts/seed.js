@@ -2,9 +2,9 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 const dotenv = require('dotenv'); // Importa dotenv para carregar variáveis de ambiente
-const User = require('./models/User'); // Importa seu modelo de Usuário
-const Task = require('./models/Task'); // Importa seu modelo de Tarefa
-const TaskExecutionHistory = require('./models/TaskExecutionHistory'); // Importa seu modelo de Histórico
+const User = require('../models/User'); // Importa seu modelo de Usuário
+const Task = require('../models/Task'); // Importa seu modelo de Tarefa
+const TaskExecutionHistory = require('../models/TaskExecutionHistory'); // Importa seu modelo de Histórico
 
 // Carrega as variáveis de ambiente do arquivo .env
 dotenv.config();

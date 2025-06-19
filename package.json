@@ -6,8 +6,8 @@
     "scripts": {
         "start": "node app.js",
         "dev": "nodemon --inspect=0.0.0.0:9229 app.js",
-        "seed:import": "node seed.js",
-        "seed:destroy": "node seed.js -d"
+        "seed": "node scripts/seed.js",
+        "seed:destroy": "node scripts/seed.js -d"
     },
     "dependencies": {
         "bcryptjs": "^3.0.2",
