@@ -1,0 +1,53 @@
+# docker-compose.yml
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:latest
+    container_name: mongodb
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD}
+    volumes:
+      - mongo-data:/data/db
+
+  backend: # Nome do serviço para o seu app Node.js
+    build:
+      context: ./backend # Constrói a imagem a partir do Dockerfile em './backend'
+      dockerfile: Dockerfile
+    container_name: backend-app
+    # A porta 3000 do backend agora será acessada internamente pelo frontend, ou externamente via porta diferente
+    # Removido o mapeamento 80:3000 daqui, pois o frontend usará a porta 80
+    ports:
+      - "3000:3000" # Porta da API do backend
+      - "9229:9229" # Porta do depurador do backend (para VS Code)
+    volumes:
+      - ./backend:/app
+      - /app/node_modules # Garante que node_modules do contêiner seja usado
+    env_file:
+      - ./backend/.env # Carrega variáveis de ambiente específicas do backend
+    depends_on:
+      - mongodb
+
+  frontend: # Novo serviço para o seu app React
+    build:
+      context: ./frontend # Constrói a imagem a partir do Dockerfile em './frontend'
+      dockerfile: Dockerfile
+    container_name: frontend-app
+    ports:
+      - "80:3000" # Mapeia a porta 80 do host para a porta 3000 do contêiner frontend
+    volumes:
+      - ./frontend:/app # Mapeamento de volume para desenvolvimento (opcional, mas útil para hot-reload)
+      - /app/node_modules # Exclui node_modules do volume local
+    environment:
+      # Variável de ambiente para o frontend saber onde está a API do backend
+      # Em desenvolvimento, o frontend acessa o backend via 'backend' (nome do serviço Docker)
+      # No build de produção, você pode precisar de um .env para produção apontando para a URL real da sua API
+      REACT_APP_API_URL: http://backend:3000 # O frontend acessa o backend pelo nome do serviço
+    depends_on:
+      - backend # Garante que o backend esteja rodando antes do frontend
+
+volumes:
+  mongo-data:

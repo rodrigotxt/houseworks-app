@@ -10,16 +10,18 @@ exports.createTaskExecution = async (req, res) => {
   const executedBy = req.user.id; // Usuário logado que executou a tarefa
 
   try {
-    // 1. Verificar se a tarefa existe e se pertence ao usuário logado (opcional, mas boa prática)
     const task = await Task.findById(taskId);
     if (!task) {
       return res.status(404).json({ message: 'Tarefa não encontrada.' });
     }
-    if (task.createdBy.toString() !== executedBy) {
-      return res.status(403).json({ message: 'Não autorizado a registrar execução para esta tarefa.' });
-    }
+    // A validação de pertinência da tarefa ao usuário criador é feita na criação da tarefa
+    // Aqui, estamos registrando quem EXECUTOU, que pode ser diferente do criador (se o app permitir)
+    // Se a regra for que apenas o CRIADOR pode registrar execução, a linha abaixo é necessária
+    // if (task.createdBy.toString() !== executedBy) {
+    //   return res.status(403).json({ message: 'Não autorizado a registrar execução para esta tarefa.' });
+    // }
 
-    // 2. Criar o novo registro de execução
+
     const newExecution = new TaskExecutionHistory({
       task: taskId,
       executedBy,
@@ -29,9 +31,8 @@ exports.createTaskExecution = async (req, res) => {
 
     const execution = await newExecution.save();
 
-    // 3. Opcional: Atualizar a data de última conclusão na própria tarefa
+    // Opcional: Atualizar a data de última conclusão na própria tarefa
     task.lastCompletedDate = execution.completionDate;
-    // Você pode adicionar lógica para calcular nextDueDate aqui, dependendo da frequência
     await task.save();
 
     res.status(201).json({ message: 'Execução de tarefa registrada com sucesso!', execution });
@@ -50,9 +51,10 @@ exports.createTaskExecution = async (req, res) => {
 // @access  Privado
 exports.getTaskExecutions = async (req, res) => {
   try {
-    // Busca execuções do usuário logado e popula os detalhes da tarefa
+    // Busca execuções do usuário logado
     const executions = await TaskExecutionHistory.find({ executedBy: req.user.id })
-      .populate('task', 'name frequency difficulty') // Popula apenas alguns campos da tarefa
+      .populate('task', 'name difficulty') // Popula a tarefa (campos específicos)
+      .populate('executedBy', 'name username email') // Popula o usuário que executou (campos específicos)
       .sort({ completionDate: -1 }); // Ordena pelas mais recentes
 
     res.status(200).json(executions);
@@ -70,9 +72,11 @@ exports.getExecutionsByTask = async (req, res) => {
   const executedBy = req.user.id; // Opcional: para garantir que o usuário só veja histórico de suas próprias tarefas
 
   try {
-    // Busca as execuções de uma tarefa específica, garantindo que pertença ao usuário logado
-    const executions = await TaskExecutionHistory.find({ task: taskId, executedBy })
-      .populate('executedBy', 'username email') // Popula informações do usuário que executou (se diferente do criador)
+    // Busca as execuções de uma tarefa específica
+    // Se você quer que o usuário logado só veja execuções de suas próprias tarefas, mantenha o `executedBy`
+    const executions = await TaskExecutionHistory.find({ task: taskId }) // Removi `executedBy` aqui para mostrar todas as execuções da tarefa,
+                                                                          // independente de quem a executou (dentro do contexto de um app doméstico)
+      .populate('executedBy', 'name username email') // Popula informações do usuário que executou
       .sort({ completionDate: -1 });
 
     res.status(200).json(executions);
@@ -82,5 +86,33 @@ exports.getExecutionsByTask = async (req, res) => {
       return res.status(400).json({ message: 'ID da tarefa inválido.' });
     }
     res.status(500).send('Erro interno do servidor ao buscar histórico por tarefa.');
+  }
+};
+
+exports.addNoteOrRating = async (req, res) => {
+  const { taskExecutionId } = req.params;
+  const { note, rating } = req.body;
+
+  try {
+    const task = await TaskExecutionHistory.findById(taskExecutionId);
+
+    if (!task) {
+      return res.status(404).json({ message: 'Tarefa nao encontrada.' });
+    }
+
+    // Garante que o usuário logado seja diferente de quem executou a tarefa
+    if (task.executedBy.toString() == req.user.id) {
+      return res.status(403).json({ message: 'Nao autorizado a atualizar esta tarefa.' });
+    }
+
+    task.note = note;
+    task.rating = rating;
+
+    await task.save();
+
+    res.status(200).json({ message: 'Notas e avaliação atualizadas com sucesso!', task });
+  } catch (error) {
+    console.error('Erro ao atualizar notas e avaliação da tarefa:', error);
+    res.status(500).send('Erro interno do servidor ao atualizar notas e avaliação da tarefa.');
   }
 };

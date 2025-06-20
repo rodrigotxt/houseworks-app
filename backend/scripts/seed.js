@@ -1,15 +1,13 @@
 // scripts/seed.js
 const mongoose = require('mongoose');
-const bcrypt = require('bcryptjs');
-const dotenv = require('dotenv'); // Importa dotenv para carregar variáveis de ambiente
-const User = require('../models/User'); // Importa seu modelo de Usuário
-const Task = require('../models/Task'); // Importa seu modelo de Tarefa
-const TaskExecutionHistory = require('../models/TaskExecutionHistory'); // Importa seu modelo de Histórico
+const bcrypt = require('bcryptjs'); // Importa bcrypt
+const dotenv = require('dotenv');
+const User = require('../models/User');
+const Task = require('../models/Task');
+const TaskExecutionHistory = require('../models/TaskExecutionHistory');
 
-// Carrega as variáveis de ambiente do arquivo .env
 dotenv.config();
 
-// Conecta ao MongoDB (usando a mesma URI do seu app)
 const connectDB = async () => {
   try {
     await mongoose.connect(process.env.MONGO_URI, {
@@ -23,7 +21,6 @@ const connectDB = async () => {
   }
 };
 
-// Dados de exemplo para seed
 const usersData = [
   {
     name: 'Rodrigo Martins',
@@ -59,22 +56,28 @@ const usersData = [
 
 const importData = async () => {
   try {
-    await connectDB(); // Conecta ao DB
+    await connectDB();
 
-    // Limpa os dados existentes para evitar duplicatas em cada execução
     console.log('Deletando dados existentes...');
     await User.deleteMany();
     await Task.deleteMany();
     await TaskExecutionHistory.deleteMany();
     console.log('Dados existentes deletados.');
 
-    // Insere os usuários
-    console.log('Importando usuários...');
-    const createdUsers = await User.insertMany(usersData);
-    const adminUser = createdUsers[0]; // Pega o primeiro usuário criado (admin)
-    const isabellaUser = createdUsers[3]; // Pega o terceiro usuário criado (Isabella)
+    console.log('Preparando usuários para importação...');
+    const hashedUsersData = await Promise.all(
+      usersData.map(async (user) => {
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash(user.password, salt);
+        return { ...user, password: hashedPassword };
+      })
+    );
 
-    // Dados de tarefas
+    console.log('Importando usuários...');
+    const createdUsers = await User.insertMany(hashedUsersData); // Usa os dados com senhas hashed
+    const adminUser = createdUsers[0];
+    const isabellaUser = createdUsers[3];
+
     const tasksData = [
       {
         name: 'Limpar banheiro',
@@ -96,12 +99,10 @@ const importData = async () => {
       }
     ];
 
-    // Insere as tarefas
     console.log('Importando tarefas...');
     const createdTasks = await Task.insertMany(tasksData);
-    const task1 = createdTasks[0]; // Pega a primeira tarefa criada
+    const task1 = createdTasks[0];
 
-    // Dados de histórico de execução
     const executionHistoryData = [
       {
         task: task1._id,
@@ -112,24 +113,22 @@ const importData = async () => {
       }
     ];
 
-    // Insere o histórico de execução
     console.log('Importando histórico de execução...');
     await TaskExecutionHistory.insertMany(executionHistoryData);
 
     console.log('Dados importados com sucesso!');
-    process.exit(); // Sai do processo com sucesso
+    process.exit();
   } catch (error) {
     console.error(`Erro na importação dos dados: ${error.message}`);
-    process.exit(1); // Sai do processo com erro
+    process.exit(1);
   } finally {
-    mongoose.connection.close(); // Garante que a conexão com o banco seja fechada
+    mongoose.connection.close();
   }
 };
 
-// Função para destruir os dados (útil para limpar o DB)
 const destroyData = async () => {
   try {
-    await connectDB(); // Conecta ao DB
+    await connectDB();
     console.log('Deletando todos os dados...');
     await User.deleteMany();
     await Task.deleteMany();
@@ -144,7 +143,6 @@ const destroyData = async () => {
   }
 };
 
-// Verifica qual função deve ser executada com base nos argumentos da linha de comando
 if (process.argv[2] === '-d' || process.argv[2] === '--destroy') {
   destroyData();
 } else {

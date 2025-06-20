@@ -9,6 +9,11 @@ const auth = require('../middlewares/auth'); // Importa o middleware de autentic
 // @access  Privado
 router.post('/', auth, taskExecutionHistoryController.createTaskExecution);
 
+// @route   POST /api/task-executions
+// @desc    Registrar rating ou note para uma execução de tarefa
+// @access  Privado
+router.patch('/:taskExecutionId', auth, taskExecutionHistoryController.addNoteOrRating);
+
 // @route   GET /api/task-executions
 // @desc    Obter todas as execuções de tarefas do usuário logado
 // @access  Privado
