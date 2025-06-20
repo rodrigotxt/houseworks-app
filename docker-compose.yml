@@ -37,17 +37,16 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+    image: frontend:latest # Imagem para desenvolvimento
     container_name: frontend-app
     ports:
-      - "80:3000"
+      - "80:3000" # A porta 3000 é a porta padrão do servidor de desenvolvimento do React
     volumes:
-      - ./frontend:/app
-      - /app/node_modules
+      - ./frontend:/app           # Mapeia o código local para o contêiner (ESSENCIAL para hot reload)
+      - /app/node_modules         # Garante que os node_modules do contêiner sejam usados
     environment:
       # Variável de ambiente para o frontend saber onde está a API do backend
-      # Em desenvolvimento, o frontend acessa o backend via 'backend' (nome do serviço Docker)
-      # No build de produção, você pode precisar de um .env para produção apontando para a URL real da sua API
-      REACT_APP_API_URL: http://backend:3000 # O frontend acessa o backend pelo nome do serviço
+      REACT_APP_API_URL: http://backend:3000 # O frontend acessa o backend pelo nome do serviço Docker
     depends_on:
       - backend
 
