@@ -89,11 +89,11 @@ exports.loginUser = async (req, res) => {
 
     jwt.sign(
       payload,
-      config.jwtSecret, // Usando o segredo do arquivo de configuração
+      config.jwtSecret,
       { expiresIn: '1h' },
       (err, token) => {
         if (err) throw err;
-        res.json({ token });
+        res.json({ token, user: payload.user });
       }
     );
 
