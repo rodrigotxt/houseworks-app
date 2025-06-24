@@ -2,15 +2,35 @@
   "version": "0.2.0",
   "configurations": [
     {
+      "name": "Attach to Frontend (Docker)",
       "type": "node",
       "request": "attach",
-      "name": "Docker: Attach to Node",
-      "port": 9229,
       "address": "localhost",
-      "localRoot": "${workspaceFolder}",
+      "port": 9230,
+      "localRoot": "${workspaceFolder}/frontend",
+      "cwd": "${workspaceFolder}/frontend",
       "remoteRoot": "/app",
       "restart": true,
-      "protocol": "inspector"
+      "protocol": "inspector",
+      "sourceMaps": true,
+      "trace": true,
+      "skipFiles": [
+        "<node_internals>/**",
+        "**/node_modules/**"
+      ]
+    },
+    {
+      "name": "Debug Client-side",
+      "type": "pwa-chrome",
+      "request": "launch",
+      "url": "http://localhost:3000",
+      "webRoot": "${workspaceFolder}/frontend"
+    }
+  ],
+  "compounds": [
+    {
+      "name": "Full Stack Debug",
+      "configurations": ["Attach to Frontend (Docker)", "Debug Client-side"]
     }
   ]
 }
