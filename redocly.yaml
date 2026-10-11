@@ -1,0 +1,14 @@
+# Configuração do lint do contrato — Fase 0 do ROADMAP.
+# Uso: npx @redocly/cli lint docs/openapi.yaml
+# O arquivo é detectado automaticamente pelo CLI quando nomeado redocly.yaml na raiz.
+extends:
+  - recommended
+
+rules:
+  # O servidor http://localhost:3001/api/v1 é intencional: é o alvo do docker compose
+  # em desenvolvimento. Produção é declarada como servidor parametrizado (https://{host}/api/v1).
+  no-server-example.com: off
+
+  # /health não devolve 4XX por definição: responde 200 (ok), 500 (falha inesperada)
+  # e 503 (banco indisponível). Não há entrada inválida a validar.
+  operation-4xx-response: off

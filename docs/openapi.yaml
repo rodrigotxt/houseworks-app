@@ -1,0 +1,2473 @@
+openapi: 3.1.0
+
+info:
+  title: HouseWorks API
+  version: 0.1.0
+  summary: API de gestão de tarefas domésticas para uma casa/família.
+  description: |
+    Contrato **fonte de verdade** do HouseWorks. O frontend consome este contrato; nenhuma regra de
+    negócio é implementada fora dele. Ver `docs/ROADMAP.md` para a ordem de execução e critérios de aceite.
+
+    ## Modelo mental
+
+    Tudo pertence a uma **Household** (a casa). Um **User** participa de uma casa através de uma
+    **Membership**, que carrega o papel (`owner` | `adult` | `child`) e as capacidades efetivas.
+    Uma **Task** é um dever recorrente da casa; o motor de recorrência materializa **TaskOccurrence**
+    (uma obrigação concreta, com data e responsável); concluir uma ocorrência cria uma **TaskExecution**,
+    que entra em `pending_review` até que **outro** membro a avalie — é a avaliação que gera os pontos.
+
+    ## Papéis e capacidades
+
+    | Ação | owner | adult | child |
+    |---|---|---|---|
+    | Criar/editar/arquivar tarefa | sim | sim | não |
+    | Designar responsável | sim | sim | não |
+    | Concluir ocorrência | qualquer uma | qualquer uma | apenas as próprias ou sem responsável |
+    | Avaliar execução de outro membro | sim | sim | não |
+    | Desfazer execução de outro membro | sim | não | não |
+    | Gerenciar membros e papéis | sim | não | não |
+    | Ver agenda, estatísticas e ranking da casa | sim | sim | sim |
+
+    Capacidades individuais podem sobrepor o papel via `Membership.capabilities`.
+
+    ## Envelope
+
+    Toda resposta de sucesso é `{ data, meta }` e todo erro é `{ error: { code, message, details, requestId } }`.
+    O cliente decide por `error.code` (catálogo estável em `ErrorCode`), nunca por texto.
+    O header `X-Request-Id` é devolvido em toda resposta e aparece nos logs do servidor.
+
+    ## Tempo
+
+    `date-time` é sempre ISO 8601 em **UTC** (sufixo `Z`). `date` (`YYYY-MM-DD`) é interpretado no
+    fuso da casa (`Household.timezone`, default `America/Sao_Paulo`). Os limites de "dia" do produto
+    são os do fuso da casa, não os do servidor.
+  contact:
+    name: Rodrigo Martins
+    url: https://github.com/rodrigotxt/houseworks-app
+  license:
+    name: MIT
+    identifier: MIT
+
+servers:
+  - url: http://localhost:3001/api/v1
+    description: Desenvolvimento local (docker compose expõe o backend na 3001)
+  - url: https://{host}/api/v1
+    description: Produção / self-host
+    variables:
+      host:
+        default: houseworks.local
+        description: Domínio da instalação
+
+tags:
+  - name: Health
+    description: Smoke test e monitoramento.
+  - name: Auth
+    description: Registro, login, sessão e identidade do usuário autenticado.
+  - name: Households
+    description: A casa, seus membros, papéis e código de convite.
+  - name: Tasks
+    description: Deveres recorrentes da casa.
+  - name: Occurrences
+    description: Ocorrências materializadas — a agenda ("Cronograma").
+  - name: Executions
+    description: Execuções e avaliação por outro membro.
+  - name: Stats
+    description: Desempenho, ranking e pontuação ("Desempenho").
+
+security:
+  - cookieAuth: []
+  - bearerAuth: []
+
+paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: Estado do serviço
+      description: Não exige autenticação. Usado em smoke test de integração e healthcheck do container.
+      security: []
+      operationId: getHealth
+      responses:
+        '200':
+          description: Serviço no ar.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/HealthStatus'
+        '503':
+          description: Serviço no ar mas dependência (banco) indisponível.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: Registrar usuário
+      description: |
+        Cria um usuário. Opcionalmente cria também uma casa na mesma chamada
+        (`householdName`), tornando o usuário `owner` dela — é o caminho de onboarding de uma família nova.
+        Sem `householdName`, o usuário entra em uma casa existente via `POST /households/join`.
+      security: []
+      operationId: registerUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: Usuário criado.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [user]
+                    properties:
+                      user:
+                        $ref: '#/components/schemas/User'
+                      household:
+                        description: Presente apenas quando `householdName` foi informado.
+                        oneOf:
+                          - $ref: '#/components/schemas/Household'
+                          - type: 'null'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          description: E-mail ou nome de usuário já registrado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                emailTaken:
+                  value:
+                    error:
+                      code: EMAIL_ALREADY_REGISTERED
+                      message: Este e-mail já está em uso.
+                      details: []
+                      requestId: 6f1c2b1e-6c1a-4c1e-9f2a-2f2f9a1b7c33
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Autenticar
+      description: |
+        Aceita `email` **ou** `username` como identificador (o código atual já suporta ambos).
+        Em clientes browser define o cookie httpOnly `jwt_token`; o corpo também devolve o token
+        para clientes não-browser.
+      security: []
+      operationId: loginUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Autenticado. Cookie `jwt_token` definido (httpOnly, SameSite=Lax).
+          headers:
+            Set-Cookie:
+              description: '`jwt_token=<jwt>; HttpOnly; Path=/; SameSite=Lax; Secure` (Secure apenas em produção).'
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [token, expiresIn, user]
+                    properties:
+                      token:
+                        type: string
+                        description: JWT. Mesmo valor gravado no cookie.
+                      expiresIn:
+                        type: integer
+                        description: Validade do token em segundos.
+                        example: 3600
+                      user:
+                        $ref: '#/components/schemas/User'
+                      memberships:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Membership'
+        '401':
+          description: Credenciais inválidas.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalidCredentials:
+                  value:
+                    error:
+                      code: INVALID_CREDENTIALS
+                      message: Credenciais inválidas.
+                      details: []
+                      requestId: 6f1c2b1e-6c1a-4c1e-9f2a-2f2f9a1b7c33
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Encerrar sessão
+      description: Invalida o cookie `jwt_token` e, se houver blacklist de tokens, invalida o JWT apresentado.
+      operationId: logoutUser
+      responses:
+        '204':
+          description: Sessão encerrada.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Renovar token
+      description: Emite um novo JWT a partir de uma sessão ainda válida e renova o cookie.
+      operationId: refreshToken
+      responses:
+        '200':
+          description: Token renovado.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [token, expiresIn]
+                    properties:
+                      token:
+                        type: string
+                      expiresIn:
+                        type: integer
+                        example: 3600
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: Usuário autenticado
+      description: |
+        Identidade do portador do token, com **todas** as suas memberships — é a chamada que o front
+        faz no boot para descobrir em qual casa está e com qual papel. Substitui o hack atual de
+        decodificar o JWT no cliente (`houseworks-frontend/lib/auth.tsx`).
+      operationId: getCurrentUser
+      responses:
+        '200':
+          description: Usuário autenticado.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [user, memberships]
+                    properties:
+                      user:
+                        $ref: '#/components/schemas/User'
+                      memberships:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Membership'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+
+  /households:
+    get:
+      tags: [Households]
+      summary: Minhas casas
+      operationId: listMyHouseholds
+      responses:
+        '200':
+          description: Casas das quais o usuário é membro.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Household'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+    post:
+      tags: [Households]
+      summary: Criar casa
+      description: O criador vira `owner`.
+      operationId: createHousehold
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateHouseholdRequest'
+      responses:
+        '201':
+          description: Casa criada.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Household'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+
+  /households/join:
+    post:
+      tags: [Households]
+      summary: Entrar em uma casa com código de convite
+      description: |
+        Cria a membership do usuário autenticado na casa do código. O papel inicial é definido por
+        `role` (default `child`) e pode ser ajustado depois por um `owner` via PATCH de membro.
+      operationId: joinHousehold
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JoinHouseholdRequest'
+      responses:
+        '201':
+          description: Membership criada.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Membership'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          description: Código de convite inválido ou expirado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalidCode:
+                  value:
+                    error:
+                      code: INVITE_CODE_INVALID
+                      message: Código de convite inválido ou expirado.
+                      details: []
+                      requestId: 6f1c2b1e-6c1a-4c1e-9f2a-2f2f9a1b7c33
+        '409':
+          description: Usuário já é membro desta casa.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /households/{householdId}:
+    parameters:
+      - $ref: '#/components/parameters/HouseholdId'
+    get:
+      tags: [Households]
+      summary: Detalhe da casa
+      operationId: getHousehold
+      responses:
+        '200':
+          description: Casa encontrada.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Household'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/NotMember'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Households]
+      summary: Atualizar casa
+      description: Exige papel `owner`.
+      operationId: updateHousehold
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateHouseholdRequest'
+      responses:
+        '200':
+          description: Casa atualizada.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Household'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/InsufficientRole'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Households]
+      summary: Remover casa
+      description: |
+        Exige papel `owner`. Operação destrutiva: remove em cascata tarefas, ocorrências e execuções
+        (exige `?confirm=true` para evitar remoção acidental).
+      operationId: deleteHousehold
+      parameters:
+        - name: confirm
+          in: query
+          required: true
+          description: Precisa ser literalmente `true`.
+          schema:
+            type: boolean
+            enum: [true]
+      responses:
+        '204':
+          description: Casa removida.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/InsufficientRole'
+
+  /households/{householdId}/invite:
+    parameters:
+      - $ref: '#/components/parameters/HouseholdId'
+    get:
+      tags: [Households]
+      summary: Consultar código de convite
+      description: Exige `owner` ou `adult`.
+      operationId: getInviteCode
+      responses:
+        '200':
+          description: Código de convite ativo.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/InviteCode'
+        '403':
+          $ref: '#/components/responses/InsufficientRole'
+    post:
+      tags: [Households]
+      summary: Rotacionar código de convite
+      description: Invalida o código anterior e emite um novo. Exige `owner`.
+      operationId: rotateInviteCode
+      responses:
+        '200':
+          description: Novo código emitido.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/InviteCode'
+        '403':
+          $ref: '#/components/responses/InsufficientRole'
+
+  /households/{householdId}/members:
+    parameters:
+      - $ref: '#/components/parameters/HouseholdId'
+    get:
+      tags: [Households]
+      summary: Membros da casa
+      description: Qualquer membro da casa pode listar (a tabela de papéis é visível a todos).
+      operationId: listMembers
+      responses:
+        '200':
+          description: Membros.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Membership'
+        '403':
+          $ref: '#/components/responses/NotMember'
+
+  /households/{householdId}/members/{userId}:
+    parameters:
+      - $ref: '#/components/parameters/HouseholdId'
+      - $ref: '#/components/parameters/MemberUserId'
+    patch:
+      tags: [Households]
+      summary: Alterar papel ou capacidades de um membro
+      description: Exige `owner`. Não é permitido rebaixar o último `owner` da casa.
+      operationId: updateMember
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateMemberRequest'
+      responses:
+        '200':
+          description: Membership atualizada.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Membership'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/InsufficientRole'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Operação deixaria a casa sem `owner`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                lastOwner:
+                  value:
+                    error:
+                      code: LAST_OWNER_CANNOT_LEAVE
+                      message: A casa precisa de pelo menos um owner.
+                      details: []
+                      requestId: 6f1c2b1e-6c1a-4c1e-9f2a-2f2f9a1b7c33
+    delete:
+      tags: [Households]
+      summary: Remover membro (ou sair da casa)
+      description: |
+        Um `owner` remove qualquer membro; qualquer usuário pode remover a **própria** membership (sair).
+        Não é permitido remover o último `owner`.
+      operationId: removeMember
+      responses:
+        '204':
+          description: Membership removida.
+        '403':
+          $ref: '#/components/responses/InsufficientRole'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Operação deixaria a casa sem `owner`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /households/{householdId}/tasks:
+    parameters:
+      - $ref: '#/components/parameters/HouseholdId'
+    get:
+      tags: [Tasks]
+      summary: Listar tarefas da casa
+      description: |
+        **Esta rota corrige o defeito P1 do baseline:** hoje `GET /api/tasks` filtra por `createdBy`,
+        então a tarefa criada pelo pai é invisível aos filhos. Aqui a visibilidade é a **casa**, não o criador.
+      operationId: listTasks
+      parameters:
+        - name: status
+          in: query
+          description: Filtra por situação da tarefa.
+          schema:
+            type: string
+            enum: [active, archived]
+            default: active
+        - name: assignedTo
+          in: query
+          description: ID do membro responsável. Use `unassigned` para tarefas sem responsável fixo.
+          schema:
+            type: string
+            example: 66f1a2b3c4d5e6f7a8b9c0d1
+        - name: frequency
+          in: query
+          schema:
+            type: string
+            enum: [diaria, semanal, mensal, anual, ocasional]
+        - name: difficulty
+          in: query
+          schema:
+            type: string
+            enum: [muito_facil, facil, medio, dificil, muito_dificil]
+        - name: q
+          in: query
+          description: Busca textual por nome.
+          schema:
+            type: string
+            minLength: 2
+        - $ref: '#/components/parameters/Sort'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Tarefas da casa.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Task'
+                  meta:
+                    $ref: '#/components/schemas/PageMeta'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/NotMember'
+    post:
+      tags: [Tasks]
+      summary: Criar tarefa
+      description: Exige `owner` ou `adult`. Se `points` não for informado, deriva da dificuldade.
+      operationId: createTask
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTaskRequest'
+      responses:
+        '201':
+          description: Tarefa criada. As ocorrências do horizonte são geradas em seguida.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Task'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/InsufficientRole'
+
+  /households/{householdId}/occurrences:
+    parameters:
+      - $ref: '#/components/parameters/HouseholdId'
+    get:
+      tags: [Occurrences]
+      summary: Agenda da casa ("Cronograma")
+      description: |
+        Ocorrências materializadas no intervalo. É a consulta que alimenta a tela de cronograma.
+        Se o horizonte materializado não cobrir `to`, o servidor faz backfill idempotente antes de responder.
+      operationId: listHouseholdOccurrences
+      parameters:
+        - $ref: '#/components/parameters/FromDate'
+        - $ref: '#/components/parameters/ToDate'
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, done, overdue, skipped]
+        - name: assignedTo
+          in: query
+          schema:
+            type: string
+        - name: taskId
+          in: query
+          schema:
+            type: string
+        - $ref: '#/components/parameters/Sort'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Ocorrências no intervalo.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TaskOccurrence'
+                  meta:
+                    $ref: '#/components/schemas/PageMeta'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/NotMember'
+
+  /households/{householdId}/executions:
+    parameters:
+      - $ref: '#/components/parameters/HouseholdId'
+    get:
+      tags: [Executions]
+      summary: Listar execuções da casa
+      description: |
+        **Corrige o defeito P1 na leitura de execuções:** hoje `GET /api/task-executions` filtra por
+        `executedBy`, o que impede qualquer visão de conjunto — sem isso não existe ranking.
+      operationId: listHouseholdExecutions
+      parameters:
+        - $ref: '#/components/parameters/FromDate'
+        - $ref: '#/components/parameters/ToDate'
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending_review, approved, auto_approved]
+        - name: executedBy
+          in: query
+          schema:
+            type: string
+        - name: pendingReviewForMe
+          in: query
+          description: Quando `true`, devolve apenas execuções que o usuário autenticado pode avaliar (fila de conferência).
+          schema:
+            type: boolean
+            default: false
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Execuções.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TaskExecution'
+                  meta:
+                    $ref: '#/components/schemas/PageMeta'
+        '403':
+          $ref: '#/components/responses/NotMember'
+
+  /households/{householdId}/stats:
+    parameters:
+      - $ref: '#/components/parameters/HouseholdId'
+    get:
+      tags: [Stats]
+      summary: Estatísticas da casa
+      description: Agregado no servidor (aggregation pipeline). Sem intervalo, considera os últimos 30 dias.
+      operationId: getHouseholdStats
+      parameters:
+        - $ref: '#/components/parameters/FromDate'
+        - $ref: '#/components/parameters/ToDate'
+      responses:
+        '200':
+          description: Estatísticas do período.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/HouseholdStats'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/NotMember'
+
+  /households/{householdId}/leaderboard:
+    parameters:
+      - $ref: '#/components/parameters/HouseholdId'
+    get:
+      tags: [Stats]
+      summary: Ranking de membros
+      description: Ordenado por pontos decrescentes; empate resolvido por maior taxa de pontualidade.
+      operationId: getLeaderboard
+      parameters:
+        - name: period
+          in: query
+          schema:
+            type: string
+            enum: [week, month, all]
+            default: week
+        - $ref: '#/components/parameters/FromDate'
+        - $ref: '#/components/parameters/ToDate'
+      responses:
+        '200':
+          description: Ranking do período.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [period, from, to, entries]
+                    properties:
+                      period:
+                        type: string
+                        enum: [week, month, all]
+                      from:
+                        type: string
+                        format: date-time
+                      to:
+                        type: string
+                        format: date-time
+                      entries:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/LeaderboardEntry'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/NotMember'
+
+  /tasks/{taskId}:
+    parameters:
+      - $ref: '#/components/parameters/TaskId'
+    get:
+      tags: [Tasks]
+      summary: Detalhe da tarefa
+      operationId: getTask
+      responses:
+        '200':
+          description: Tarefa encontrada.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Task'
+        '403':
+          $ref: '#/components/responses/NotMember'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Tasks]
+      summary: Atualizar tarefa
+      description: |
+        Exige `owner` ou `adult`. Apenas os campos presentes são alterados.
+        Alterar a recorrência **não** reescreve ocorrências passadas; a partir da data da mudança,
+        o gerador passa a usar a nova regra.
+      operationId: updateTask
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTaskRequest'
+      responses:
+        '200':
+          description: Tarefa atualizada.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Task'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/InsufficientRole'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Tasks]
+      summary: Arquivar (ou excluir) tarefa
+      description: |
+        Sem `?hard=true`, faz **arquivamento lógico** (as ocorrências e o histórico são preservados —
+        apagar destruiria o placar). Com `?hard=true` e papel `owner`, remove em cascata.
+      operationId: deleteTask
+      parameters:
+        - name: hard
+          in: query
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '204':
+          description: Tarefa arquivada ou removida.
+        '403':
+          $ref: '#/components/responses/InsufficientRole'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Tarefa possui execuções aprovadas e `hard=true` apagaria o histórico.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /tasks/{taskId}/occurrences:
+    parameters:
+      - $ref: '#/components/parameters/TaskId'
+    get:
+      tags: [Occurrences]
+      summary: Ocorrências de uma tarefa
+      operationId: listTaskOccurrences
+      parameters:
+        - $ref: '#/components/parameters/FromDate'
+        - $ref: '#/components/parameters/ToDate'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Ocorrências da tarefa.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TaskOccurrence'
+                  meta:
+                    $ref: '#/components/schemas/PageMeta'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /occurrences/{occurrenceId}:
+    parameters:
+      - $ref: '#/components/parameters/OccurrenceId'
+    get:
+      tags: [Occurrences]
+      summary: Detalhe da ocorrência
+      operationId: getOccurrence
+      responses:
+        '200':
+          description: Ocorrência encontrada.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/TaskOccurrence'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /occurrences/{occurrenceId}/complete:
+    parameters:
+      - $ref: '#/components/parameters/OccurrenceId'
+    post:
+      tags: [Executions]
+      summary: Concluir ocorrência
+      description: |
+        Registra a execução e move a ocorrência para `done`. A execução nasce em `pending_review`
+        (pontos só contam após avaliação — ver Fase 3 do roadmap).
+
+        Regra de papel: `owner`/`adult` concluem qualquer ocorrência; `child` apenas as próprias
+        ou as sem responsável definido.
+      operationId: completeOccurrence
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CompleteOccurrenceRequest'
+      responses:
+        '201':
+          description: Execução criada; ocorrência concluída.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [occurrence, execution]
+                    properties:
+                      occurrence:
+                        $ref: '#/components/schemas/TaskOccurrence'
+                      execution:
+                        $ref: '#/components/schemas/TaskExecution'
+        '403':
+          description: Usuário não pode concluir esta ocorrência.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                notAssignedToYou:
+                  value:
+                    error:
+                      code: OCCURRENCE_NOT_ASSIGNED_TO_YOU
+                      message: Esta ocorrência está designada a outro membro.
+                      details: []
+                      requestId: 6f1c2b1e-6c1a-4c1e-9f2a-2f2f9a1b7c33
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Ocorrência já concluída ou cancelada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                alreadyCompleted:
+                  value:
+                    error:
+                      code: OCCURRENCE_ALREADY_COMPLETED
+                      message: Esta ocorrência já foi concluída.
+                      details: []
+                      requestId: 6f1c2b1e-6c1a-4c1e-9f2a-2f2f9a1b7c33
+
+  /occurrences/{occurrenceId}/skip:
+    parameters:
+      - $ref: '#/components/parameters/OccurrenceId'
+    post:
+      tags: [Occurrences]
+      summary: Pular ocorrência
+      description: |
+        Marca a ocorrência como `skipped` (justificada). Não gera pontos e não conta como atraso no
+        desempenho. Exige `owner` ou `adult`.
+      operationId: skipOccurrence
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SkipOccurrenceRequest'
+      responses:
+        '200':
+          description: Ocorrência pulada.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/TaskOccurrence'
+        '403':
+          $ref: '#/components/responses/InsufficientRole'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Ocorrência já concluída.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /occurrences/{occurrenceId}/undo:
+    parameters:
+      - $ref: '#/components/parameters/OccurrenceId'
+    post:
+      tags: [Executions]
+      summary: Desfazer conclusão
+      description: |
+        Reverte a ocorrência para `pending` e remove a execução associada — **incluindo os pontos já
+        computados**. Quem executou pode desfazer a própria execução dentro da janela; `owner` pode
+        desfazer qualquer uma. Registra em log de auditoria (nunca apaga silenciosamente).
+      operationId: undoOccurrence
+      responses:
+        '200':
+          description: Conclusão desfeita.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/TaskOccurrence'
+        '403':
+          $ref: '#/components/responses/InsufficientRole'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Ocorrência não está concluída.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                notCompleted:
+                  value:
+                    error:
+                      code: OCCURRENCE_NOT_COMPLETED
+                      message: Esta ocorrência não está concluída.
+                      details: []
+                      requestId: 6f1c2b1e-6c1a-4c1e-9f2a-2f2f9a1b7c33
+
+  /occurrences/{occurrenceId}/executions:
+    parameters:
+      - $ref: '#/components/parameters/OccurrenceId'
+    get:
+      tags: [Executions]
+      summary: Execuções de uma ocorrência
+      description: Histórico de tentativas — útil após um `undo` e para auditoria.
+      operationId: listOccurrenceExecutions
+      responses:
+        '200':
+          description: Execuções da ocorrência.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TaskExecution'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /executions/{executionId}:
+    parameters:
+      - $ref: '#/components/parameters/ExecutionId'
+    get:
+      tags: [Executions]
+      summary: Detalhe da execução
+      operationId: getExecution
+      responses:
+        '200':
+          description: Execução encontrada.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/TaskExecution'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /executions/{executionId}/rating:
+    parameters:
+      - $ref: '#/components/parameters/ExecutionId'
+    patch:
+      tags: [Executions]
+      summary: Avaliar execução
+      description: |
+        **A regra central do produto.** Quem executou **não pode** avaliar a própria execução
+        (preserva o comportamento atual de `addNoteOrRating`, que hoje responde 403 nesse caso),
+        e o avaliador precisa de `canRate` (`owner` ou `adult`).
+
+        Ao avaliar, a execução passa para `approved` e os pontos entram no placar. Sem avaliação
+        dentro da janela (`ratingWindowHours`, default 72h), a execução é **auto-aprovada** com
+        `rating: null` para que ninguém fique preso a um avaliador ausente.
+      operationId: rateExecution
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RateExecutionRequest'
+      responses:
+        '200':
+          description: Execução avaliada e aprovada.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/TaskExecution'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          description: Auto-avaliação ou falta de capacidade para avaliar.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                selfRating:
+                  value:
+                    error:
+                      code: CANNOT_RATE_OWN_EXECUTION
+                      message: Você não pode avaliar a sua própria execução.
+                      details: []
+                      requestId: 6f1c2b1e-6c1a-4c1e-9f2a-2f2f9a1b7c33
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Execução já avaliada, ou janela de avaliação encerrada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                alreadyRated:
+                  value:
+                    error:
+                      code: EXECUTION_ALREADY_RATED
+                      message: Esta execução já foi avaliada.
+                      details: []
+                      requestId: 6f1c2b1e-6c1a-4c1e-9f2a-2f2f9a1b7c33
+                windowClosed:
+                  value:
+                    error:
+                      code: RATING_WINDOW_CLOSED
+                      message: O prazo para avaliar esta execução expirou.
+                      details: []
+                      requestId: 6f1c2b1e-6c1a-4c1e-9f2a-2f2f9a1b7c33
+
+  /me/occurrences:
+    get:
+      tags: [Occurrences]
+      summary: Minha agenda
+      description: Ocorrências designadas ao usuário autenticado **ou** sem responsável definido. Alimenta a home do app.
+      operationId: listMyOccurrences
+      parameters:
+        - $ref: '#/components/parameters/FromDate'
+        - $ref: '#/components/parameters/ToDate'
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, done, overdue, skipped]
+        - name: householdId
+          in: query
+          description: Restringe a uma casa. Sem ele, considera todas as casas do usuário.
+          schema:
+            type: string
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Minhas ocorrências.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TaskOccurrence'
+                  meta:
+                    $ref: '#/components/schemas/PageMeta'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+
+  /me/score:
+    get:
+      tags: [Stats]
+      summary: Minha pontuação
+      operationId: getMyScore
+      parameters:
+        - name: householdId
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: period
+          in: query
+          schema:
+            type: string
+            enum: [week, month, all]
+            default: month
+        - $ref: '#/components/parameters/FromDate'
+        - $ref: '#/components/parameters/ToDate'
+      responses:
+        '200':
+          description: Pontuação do usuário autenticado.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Score'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/NotMember'
+
+components:
+
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: jwt_token
+      description: |
+        Cookie httpOnly definido no login — via preferencial do browser (imune a XSS, e o middleware
+        do Next.js já o utiliza).
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        `Authorization: Bearer <jwt>` para clientes não-browser (mobile, CLI, scripts).
+        Substitui o header `x-auth-token` usado hoje pelo middleware `middlewares/auth.js`.
+
+  parameters:
+    HouseholdId:
+      name: householdId
+      in: path
+      required: true
+      description: Identificador da casa.
+      schema:
+        type: string
+        example: 66f1a2b3c4d5e6f7a8b9c0d0
+    TaskId:
+      name: taskId
+      in: path
+      required: true
+      description: Identificador da tarefa.
+      schema:
+        type: string
+        example: 66f1a2b3c4d5e6f7a8b9c0d1
+    OccurrenceId:
+      name: occurrenceId
+      in: path
+      required: true
+      description: Identificador da ocorrência.
+      schema:
+        type: string
+        example: 66f1a2b3c4d5e6f7a8b9c0d2
+    ExecutionId:
+      name: executionId
+      in: path
+      required: true
+      description: Identificador da execução.
+      schema:
+        type: string
+        example: 66f1a2b3c4d5e6f7a8b9c0d3
+    MemberUserId:
+      name: userId
+      in: path
+      required: true
+      description: Identificador do usuário membro da casa.
+      schema:
+        type: string
+        example: 66f1a2b3c4d5e6f7a8b9c0d4
+    Page:
+      name: page
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    PageSize:
+      name: pageSize
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+    Sort:
+      name: sort
+      in: query
+      description: |
+        Campo de ordenação; prefixo `-` para decrescente.
+        Exemplos: `dueDate`, `-dueDate`, `name`, `-createdAt`.
+      schema:
+        type: string
+        example: -dueDate
+    FromDate:
+      name: from
+      in: query
+      description: Início do intervalo, interpretado no fuso da casa. Inclusive.
+      schema:
+        type: string
+        format: date
+        example: '2025-07-01'
+    ToDate:
+      name: to
+      in: query
+      description: Fim do intervalo, interpretado no fuso da casa. Inclusive.
+      schema:
+        type: string
+        format: date
+        example: '2025-07-31'
+
+  headers:
+    X-Request-Id:
+      description: Identificador único da requisição, presente também nos logs do servidor. Informe-o em qualquer suporte.
+      schema:
+        type: string
+        format: uuid
+
+  responses:
+    BadRequest:
+      description: Requisição inválida (falha de validação de entrada ou parâmetros incoerentes).
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/X-Request-Id'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            validation:
+              value:
+                error:
+                  code: VALIDATION_ERROR
+                  message: Um ou mais campos são inválidos.
+                  requestId: 6f1c2b1e-6c1a-4c1e-9f2a-2f2f9a1b7c33
+                  details:
+                    - field: frequency
+                      issue: Valor deve ser diaria, semanal, mensal, anual ou ocasional.
+            dateRange:
+              value:
+                error:
+                  code: INVALID_DATE_RANGE
+                  message: 'A data inicial não pode ser posterior à final.'
+                  details: []
+                  requestId: 6f1c2b1e-6c1a-4c1e-9f2a-2f2f9a1b7c33
+    Unauthenticated:
+      description: Token ausente, inválido ou expirado.
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/X-Request-Id'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            missing:
+              value:
+                error:
+                  code: UNAUTHENTICATED
+                  message: Autenticação necessária.
+                  details: []
+                  requestId: 6f1c2b1e-6c1a-4c1e-9f2a-2f2f9a1b7c33
+            expired:
+              value:
+                error:
+                  code: TOKEN_EXPIRED
+                  message: Sessão expirada. Faça login novamente.
+                  details: []
+                  requestId: 6f1c2b1e-6c1a-4c1e-9f2a-2f2f9a1b7c33
+    NotMember:
+      description: O usuário autenticado não é membro desta casa.
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/X-Request-Id'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            notMember:
+              value:
+                error:
+                  code: NOT_HOUSEHOLD_MEMBER
+                  message: Você não tem acesso a esta casa.
+                  details: []
+                  requestId: 6f1c2b1e-6c1a-4c1e-9f2a-2f2f9a1b7c33
+    InsufficientRole:
+      description: O papel do usuário não permite esta ação.
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/X-Request-Id'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            insufficientRole:
+              value:
+                error:
+                  code: INSUFFICIENT_ROLE
+                  message: Seu papel nesta casa não permite esta ação.
+                  details: []
+                  requestId: 6f1c2b1e-6c1a-4c1e-9f2a-2f2f9a1b7c33
+    NotFound:
+      description: Recurso inexistente ou pertencente a outra casa (não vazamos existência entre casas).
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/X-Request-Id'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            notFound:
+              value:
+                error:
+                  code: TASK_NOT_FOUND
+                  message: Tarefa não encontrada.
+                  details: []
+                  requestId: 6f1c2b1e-6c1a-4c1e-9f2a-2f2f9a1b7c33
+    TooManyRequests:
+      description: Limite de requisições excedido (aplicado sobretudo em `/auth/login` e `/auth/register`).
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/X-Request-Id'
+        Retry-After:
+          description: Segundos até poder tentar novamente.
+          schema:
+            type: integer
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            rateLimited:
+              value:
+                error:
+                  code: RATE_LIMITED
+                  message: Muitas tentativas. Tente novamente em instantes.
+                  details: []
+                  requestId: 6f1c2b1e-6c1a-4c1e-9f2a-2f2f9a1b7c33
+    InternalError:
+      description: |
+        Falha inesperada do servidor. O corpo nunca vaza stack trace nem detalhe interno:
+        apenas `code`, mensagem genérica e o `requestId` para correlacionar com os logs.
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/X-Request-Id'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            internal:
+              value:
+                error:
+                  code: INTERNAL_ERROR
+                  message: Erro interno do servidor.
+                  details: []
+                  requestId: 6f1c2b1e-6c1a-4c1e-9f2a-2f2f9a1b7c33
+
+  schemas:
+
+    # ---------------------------------------------------------------- erros
+
+    ErrorCode:
+      type: string
+      description: Catálogo estável de códigos de erro. O cliente decide por este campo, nunca pelo texto de `message`.
+      enum:
+        - VALIDATION_ERROR
+        - INVALID_DATE_RANGE
+        - UNAUTHENTICATED
+        - TOKEN_EXPIRED
+        - TOKEN_INVALID
+        - INVALID_CREDENTIALS
+        - EMAIL_ALREADY_REGISTERED
+        - USERNAME_ALREADY_REGISTERED
+        - RATE_LIMITED
+        - FORBIDDEN
+        - NOT_HOUSEHOLD_MEMBER
+        - INSUFFICIENT_ROLE
+        - HOUSEHOLD_NOT_FOUND
+        - INVITE_CODE_INVALID
+        - MEMBER_NOT_FOUND
+        - DUPLICATE_MEMBER
+        - LAST_OWNER_CANNOT_LEAVE
+        - TASK_NOT_FOUND
+        - TASK_ARCHIVED
+        - OCCURRENCE_NOT_FOUND
+        - OCCURRENCE_ALREADY_COMPLETED
+        - OCCURRENCE_NOT_COMPLETED
+        - OCCURRENCE_NOT_ASSIGNED_TO_YOU
+        - EXECUTION_NOT_FOUND
+        - EXECUTION_ALREADY_RATED
+        - CANNOT_RATE_OWN_EXECUTION
+        - RATING_WINDOW_CLOSED
+        - CONFLICT
+        - INTERNAL_ERROR
+        - SERVICE_UNAVAILABLE
+
+    ValidationIssue:
+      type: object
+      required: [field, issue]
+      properties:
+        field:
+          type: string
+          description: Caminho do campo inválido (ex. `recurrence.weekdays`).
+          example: recurrence.weekdays
+        issue:
+          type: string
+          description: Descrição legível do problema naquele campo.
+          example: Informe ao menos um dia da semana para frequência semanal.
+
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          $ref: '#/components/schemas/ErrorCode'
+        message:
+          type: string
+          description: Mensagem legível, em pt-BR, pronta para exibição ao usuário final.
+          example: Tarefa não encontrada.
+        details:
+          type: array
+          description: Detalhes por campo, presente sobretudo em `VALIDATION_ERROR`.
+          items:
+            $ref: '#/components/schemas/ValidationIssue'
+        requestId:
+          type: string
+          format: uuid
+          description: Correlaciona a resposta com os logs do servidor.
+
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          $ref: '#/components/schemas/Error'
+
+    PageMeta:
+      type: object
+      required: [page, pageSize, total, totalPages]
+      properties:
+        page:
+          type: integer
+          minimum: 1
+        pageSize:
+          type: integer
+          minimum: 1
+        total:
+          type: integer
+          minimum: 0
+          description: Total de registros que satisfazem o filtro (não apenas os da página).
+        totalPages:
+          type: integer
+          minimum: 0
+
+    HealthStatus:
+      type: object
+      required: [status, uptimeSeconds]
+      properties:
+        status:
+          type: string
+          enum: [ok, degraded]
+        uptimeSeconds:
+          type: integer
+          example: 3821
+        version:
+          type: string
+          example: 0.1.0
+        database:
+          type: string
+          enum: [connected, disconnected]
+
+    # ------------------------------------------------------------ identidade
+
+    UserRef:
+      type: object
+      description: Referência enxuta a um usuário, usada dentro de outros recursos.
+      required: [id, name, username]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+          example: Arthur Soares Martins
+        username:
+          type: string
+          example: arthur
+
+    User:
+      type: object
+      description: Usuário. A senha (hash) **nunca** é serializada em nenhuma resposta.
+      required: [id, name, username, email, createdAt]
+      properties:
+        id:
+          type: string
+          example: 66f1a2b3c4d5e6f7a8b9c0d4
+        name:
+          type: string
+          example: Rodrigo Martins
+        username:
+          type: string
+          example: rodrigo
+        email:
+          type: string
+          format: email
+          example: contato@rodrigo.inf.br
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    # --------------------------------------------------------------- casa
+
+    Household:
+      type: object
+      required: [id, name, timezone, ownerId, ratingWindowHours, horizonDays, createdAt]
+      properties:
+        id:
+          type: string
+          example: 66f1a2b3c4d5e6f7a8b9c0d0
+        name:
+          type: string
+          example: Casa dos Martins
+        timezone:
+          type: string
+          description: |
+            Fuso IANA usado em **todo** cálculo de "dia" do produto (virada do dia, atraso, semana do ranking).
+            Default `America/Sao_Paulo`.
+          default: America/Sao_Paulo
+          example: America/Sao_Paulo
+        ownerId:
+          type: string
+          description: Usuário `owner` original da casa.
+        ratingWindowHours:
+          type: integer
+          description: Prazo, em horas, para outro membro avaliar uma execução antes da auto-aprovação.
+          default: 72
+          minimum: 1
+          example: 72
+        horizonDays:
+          type: integer
+          description: Quantos dias de ocorrências o gerador materializa à frente.
+          default: 30
+          minimum: 1
+          maximum: 365
+          example: 30
+        createdAt:
+          type: string
+          format: date-time
+
+    Membership:
+      type: object
+      description: Vínculo entre um usuário e uma casa. É aqui que mora a autorização.
+      required: [id, householdId, user, role, capabilities, joinedAt]
+      properties:
+        id:
+          type: string
+        householdId:
+          type: string
+        user:
+          $ref: '#/components/schemas/UserRef'
+        role:
+          type: string
+          enum: [owner, adult, child]
+          description: |
+            `owner` administra a casa e os membros; `adult` cria tarefas, designa e avalia;
+            `child` executa e acompanha o próprio desempenho.
+          example: adult
+        capabilities:
+          type: object
+          description: Capacidades efetivas (o papel define o padrão; estes campos permitem exceções pontuais).
+          required: [canAssign, canRate, canManageTasks, canManageMembers]
+          properties:
+            canAssign:
+              type: boolean
+            canRate:
+              type: boolean
+            canManageTasks:
+              type: boolean
+            canManageMembers:
+              type: boolean
+        joinedAt:
+          type: string
+          format: date-time
+
+    InviteCode:
+      type: object
+      required: [code, expiresAt]
+      properties:
+        code:
+          type: string
+          example: MARTINS-7K2Q
+        expiresAt:
+          type: string
+          format: date-time
+          description: Momento em que o código deixa de ser aceito.
+
+    # -------------------------------------------------------------- tarefa
+
+    Recurrence:
+      type: object
+      description: |
+        Regra de recorrência exposta pela API. É traduzida internamente para RRULE (iCalendar) —
+        a API não expõe RRULE cru para manter o contrato legível e estável.
+      required: [frequency, startDate]
+      properties:
+        frequency:
+          type: string
+          enum: [diaria, semanal, mensal, anual, ocasional]
+          description: |
+            `ocasional` gera **uma única** ocorrência em `startDate` (tarefa pontual, sem repetição).
+          example: semanal
+        interval:
+          type: integer
+          description: A cada N períodos. `2` com `semanal` significa quinzenal.
+          default: 1
+          minimum: 1
+          example: 1
+        weekdays:
+          type: array
+          description: Obrigatório quando `frequency` é `semanal`. Índices no padrão do JavaScript (domingo = 0).
+          uniqueItems: true
+          items:
+            type: integer
+            minimum: 0
+            maximum: 6
+          example: [6]
+        dayOfMonth:
+          type: integer
+          description: |
+            Para `mensal`/`anual`. Se o mês não tiver o dia (31 em fevereiro), a ocorrência cai no
+            último dia do mês — comportamento explicitado aqui para não virar bug silencioso.
+          minimum: 1
+          maximum: 31
+          example: 5
+        startDate:
+          type: string
+          format: date
+          description: Primeira data elegível, no fuso da casa.
+          example: '2025-07-01'
+        endDate:
+          type: string
+          format: date
+          description: Última data elegível (inclusive). Ausente significa recorrência sem fim.
+          example: '2025-12-31'
+
+    Task:
+      type: object
+      description: Dever recorrente da casa.
+      required: [id, householdId, name, recurrence, difficulty, points, status, createdBy, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        householdId:
+          type: string
+        name:
+          type: string
+          minLength: 3
+          maxLength: 100
+          example: Limpar banheiro
+        description:
+          type: string
+          maxLength: 500
+          example: Inclui box, vaso, pia e espelho.
+        recurrence:
+          $ref: '#/components/schemas/Recurrence'
+        difficulty:
+          type: string
+          enum: [muito_facil, facil, medio, dificil, muito_dificil]
+          example: dificil
+        points:
+          type: integer
+          minimum: 0
+          description: |
+            Pontos creditados quando a execução é aprovada. Derivado da dificuldade por padrão
+            (`muito_facil`=1, `facil`=2, `medio`=3, `dificil`=5, `muito_dificil`=8), sobreponível.
+          example: 5
+        assignedTo:
+          description: |
+            Responsável fixo. `null` significa "qualquer membro pode assumir" — nesse caso cada
+            ocorrência nasce sem responsável.
+          oneOf:
+            - $ref: '#/components/schemas/UserRef'
+            - type: 'null'
+        status:
+          type: string
+          enum: [active, archived]
+          default: active
+        createdBy:
+          $ref: '#/components/schemas/UserRef'
+        nextDueDate:
+          description: |
+            Somente leitura, derivado da próxima ocorrência pendente. Substitui o `nextDueDate`
+            gravado no baseline (que nunca era calculado).
+          oneOf:
+            - type: string
+              format: date
+            - type: 'null'
+        lastCompletedDate:
+          description: Somente leitura, derivado da última ocorrência concluída.
+          oneOf:
+            - type: string
+              format: date-time
+            - type: 'null'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    # ----------------------------------------------------------- ocorrência
+
+    TaskOccurrence:
+      type: object
+      description: |
+        Obrigação concreta e datada, gerada a partir da recorrência da tarefa. É a unidade que o
+        usuário vê na agenda e a que carrega atraso, responsável e conclusão.
+      required: [id, householdId, taskId, dueDate, status, points, createdAt]
+      properties:
+        id:
+          type: string
+        householdId:
+          type: string
+        taskId:
+          type: string
+        task:
+          description: Resumo da tarefa, incluído nas listagens para evitar N+1 no cliente.
+          type: object
+          properties:
+            id:
+              type: string
+            name:
+              type: string
+              example: Limpar banheiro
+            difficulty:
+              type: string
+              enum: [muito_facil, facil, medio, dificil, muito_dificil]
+        dueDate:
+          type: string
+          format: date
+          description: Dia em que a ocorrência deve ser cumprida, no fuso da casa.
+          example: '2025-07-05'
+        assignedTo:
+          description: Responsável desta ocorrência específica. `null` = qualquer membro pode fazer.
+          oneOf:
+            - $ref: '#/components/schemas/UserRef'
+            - type: 'null'
+        status:
+          type: string
+          enum: [pending, done, overdue, skipped]
+          description: |
+            `pending` aguardando · `done` concluída · `overdue` venceu sem conclusão
+            (após o período de tolerância) · `skipped` pulada com justificativa.
+        points:
+          type: integer
+          description: Pontos em jogo nesta ocorrência (cópia do valor vigente da tarefa no momento da geração).
+          example: 5
+        completedAt:
+          oneOf:
+            - type: string
+              format: date-time
+            - type: 'null'
+        completedBy:
+          oneOf:
+            - $ref: '#/components/schemas/UserRef'
+            - type: 'null'
+        skippedReason:
+          oneOf:
+            - type: string
+            - type: 'null'
+        isLate:
+          type: boolean
+          description: Indica se a conclusão ocorreu após o `dueDate` (calculado, não armazenado).
+        createdAt:
+          type: string
+          format: date-time
+
+    # ------------------------------------------------------------ execução
+
+    TaskExecution:
+      type: object
+      description: |
+        Registro de que alguém cumpriu uma ocorrência, e o resultado da conferência de **outro** membro.
+        Substitui `TaskExecutionHistory` (que guardava `note`/`rating` sem distinguir quem avaliou).
+      required: [id, householdId, occurrenceId, taskId, executedBy, completionDate, status, points, createdAt]
+      properties:
+        id:
+          type: string
+        householdId:
+          type: string
+        occurrenceId:
+          type: string
+        taskId:
+          type: string
+        task:
+          type: object
+          properties:
+            id:
+              type: string
+            name:
+              type: string
+              example: Limpar banheiro
+        executedBy:
+          $ref: '#/components/schemas/UserRef'
+        completionDate:
+          type: string
+          format: date-time
+        note:
+          description: Comentário de quem executou.
+          oneOf:
+            - type: string
+              maxLength: 500
+            - type: 'null'
+          example: Banheiro limpo e brilhando!
+        status:
+          type: string
+          enum: [pending_review, approved, auto_approved]
+          description: |
+            `pending_review` aguardando avaliação · `approved` avaliada por outro membro ·
+            `auto_approved` a janela de avaliação expirou sem que ninguém avaliasse.
+        rating:
+          description: Nota de 1 a 5 dada pelo avaliador. `null` enquanto pendente ou em auto-aprovação.
+          oneOf:
+            - type: integer
+              minimum: 1
+              maximum: 5
+            - type: 'null'
+          example: 5
+        ratedBy:
+          description: Quem avaliou. Nunca é o próprio `executedBy`.
+          oneOf:
+            - $ref: '#/components/schemas/UserRef'
+            - type: 'null'
+        ratedAt:
+          oneOf:
+            - type: string
+              format: date-time
+            - type: 'null'
+        ratingNote:
+          oneOf:
+            - type: string
+              maxLength: 500
+            - type: 'null'
+        points:
+          type: integer
+          description: Pontos creditados. Contam no placar apenas quando `status` é `approved` ou `auto_approved`.
+          example: 5
+        createdAt:
+          type: string
+          format: date-time
+
+    # --------------------------------------------------------- desempenho
+
+    MemberStats:
+      type: object
+      required: [user, points, completed, overdue, skipped, onTimeRate, avgRating]
+      properties:
+        user:
+          $ref: '#/components/schemas/UserRef'
+        points:
+          type: integer
+          description: Soma dos pontos de execuções aprovadas no período.
+          example: 42
+        completed:
+          type: integer
+          example: 12
+        overdue:
+          type: integer
+          example: 2
+        skipped:
+          type: integer
+          example: 1
+        onTimeRate:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          description: Fração das conclusões feitas até o `dueDate`.
+          example: 0.83
+        avgRating:
+          oneOf:
+            - type: number
+              format: float
+              minimum: 1
+              maximum: 5
+            - type: 'null'
+          description: Média das notas recebidas. `null` se nada foi avaliado no período.
+          example: 4.7
+
+    TaskStats:
+      type: object
+      required: [taskId, name, occurrences, completed, overdue, avgCompletionDelayHours]
+      properties:
+        taskId:
+          type: string
+        name:
+          type: string
+          example: Limpar banheiro
+        occurrences:
+          type: integer
+        completed:
+          type: integer
+        overdue:
+          type: integer
+        avgCompletionDelayHours:
+          type: number
+          format: float
+          description: Atraso médio em horas (negativo indica adiantamento).
+          example: 6.5
+
+    HouseholdStats:
+      type: object
+      required: [householdId, from, to, totals, byMember, byTask]
+      properties:
+        householdId:
+          type: string
+        from:
+          type: string
+          format: date-time
+        to:
+          type: string
+          format: date-time
+        totals:
+          type: object
+          required: [occurrences, completed, overdue, skipped, completionRate, onTimeRate, avgCompletionDelayHours]
+          properties:
+            occurrences:
+              type: integer
+            completed:
+              type: integer
+            overdue:
+              type: integer
+            skipped:
+              type: integer
+            completionRate:
+              type: number
+              format: float
+              minimum: 0
+              maximum: 1
+              example: 0.78
+            onTimeRate:
+              type: number
+              format: float
+              minimum: 0
+              maximum: 1
+              example: 0.71
+            avgCompletionDelayHours:
+              type: number
+              format: float
+              example: 4.2
+        byMember:
+          type: array
+          items:
+            $ref: '#/components/schemas/MemberStats'
+        byTask:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaskStats'
+
+    LeaderboardEntry:
+      type: object
+      required: [position, user, points, completed, onTimeRate]
+      properties:
+        position:
+          type: integer
+          minimum: 1
+          example: 1
+        user:
+          $ref: '#/components/schemas/UserRef'
+        points:
+          type: integer
+          example: 42
+        completed:
+          type: integer
+          example: 12
+        onTimeRate:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          example: 0.83
+
+    Score:
+      type: object
+      required: [householdId, user, period, points, completed, position]
+      properties:
+        householdId:
+          type: string
+        user:
+          $ref: '#/components/schemas/UserRef'
+        period:
+          type: string
+          enum: [week, month, all]
+        points:
+          type: integer
+          example: 42
+        completed:
+          type: integer
+          example: 12
+        position:
+          oneOf:
+            - type: integer
+              minimum: 1
+            - type: 'null'
+          description: Posição no ranking da casa no mesmo período.
+          example: 2
+
+    # ---------------------------------------------------- corpos de entrada
+
+    RegisterRequest:
+      type: object
+      required: [name, username, email, password]
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 80
+          example: Isabella Soares Martins
+        username:
+          type: string
+          minLength: 3
+          maxLength: 30
+          pattern: '^[a-zA-Z0-9._-]+$'
+          example: isabella
+        email:
+          type: string
+          format: email
+          example: isabella@rodrigo.inf.br
+        password:
+          type: string
+          minLength: 8
+          maxLength: 72
+          description: Mínimo elevado de 6 (baseline) para 8. O máximo de 72 respeita o limite do bcrypt.
+          format: password
+        householdName:
+          type: string
+          minLength: 2
+          maxLength: 80
+          description: Se informado, cria a casa e torna este usuário `owner` dela.
+          example: Casa dos Martins
+        timezone:
+          type: string
+          description: Fuso da casa criada. Ignorado se `householdName` não for informado.
+          default: America/Sao_Paulo
+
+    LoginRequest:
+      type: object
+      description: Informe `email` **ou** `username`.
+      required: [password]
+      properties:
+        email:
+          type: string
+          format: email
+          example: contato@rodrigo.inf.br
+        username:
+          type: string
+          example: rodrigo
+        password:
+          type: string
+          format: password
+      anyOf:
+        - required: [email]
+          properties:
+            email:
+              type: string
+              format: email
+            username:
+              type: string
+        - required: [username]
+          properties:
+            email:
+              type: string
+              format: email
+            username:
+              type: string
+
+    CreateHouseholdRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 80
+          example: Casa dos Martins
+        timezone:
+          type: string
+          default: America/Sao_Paulo
+        ratingWindowHours:
+          type: integer
+          minimum: 1
+          maximum: 720
+          default: 72
+        horizonDays:
+          type: integer
+          minimum: 1
+          maximum: 365
+          default: 30
+
+    UpdateHouseholdRequest:
+      type: object
+      minProperties: 1
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 80
+        timezone:
+          type: string
+        ratingWindowHours:
+          type: integer
+          minimum: 1
+          maximum: 720
+        horizonDays:
+          type: integer
+          minimum: 1
+          maximum: 365
+
+    JoinHouseholdRequest:
+      type: object
+      required: [inviteCode]
+      properties:
+        inviteCode:
+          type: string
+          example: MARTINS-7K2Q
+        role:
+          type: string
+          enum: [adult, child]
+          default: child
+          description: Papel inicial. `owner` não pode ser auto-atribuído no ingresso.
+
+    UpdateMemberRequest:
+      type: object
+      minProperties: 1
+      properties:
+        role:
+          type: string
+          enum: [owner, adult, child]
+        capabilities:
+          type: object
+          properties:
+            canAssign:
+              type: boolean
+            canRate:
+              type: boolean
+            canManageTasks:
+              type: boolean
+            canManageMembers:
+              type: boolean
+
+    CreateTaskRequest:
+      type: object
+      required: [name, recurrence, difficulty]
+      properties:
+        name:
+          type: string
+          minLength: 3
+          maxLength: 100
+          example: Lavar louça
+        description:
+          type: string
+          maxLength: 500
+        recurrence:
+          $ref: '#/components/schemas/Recurrence'
+        difficulty:
+          type: string
+          enum: [muito_facil, facil, medio, dificil, muito_dificil]
+          example: facil
+        points:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: Opcional. Sem ele, deriva da dificuldade.
+        assignedTo:
+          type: string
+          description: ID do membro responsável. Omitido ou `null` = qualquer um pode assumir.
+          example: 66f1a2b3c4d5e6f7a8b9c0d4
+
+    UpdateTaskRequest:
+      type: object
+      minProperties: 1
+      description: |
+        Atualização parcial. Campos de controle (`status`, `nextDueDate`, `lastCompletedDate`) **não**
+        são aceitos — o baseline permitia enviá-los pelo corpo (mass-assignment); aqui são derivados.
+      properties:
+        name:
+          type: string
+          minLength: 3
+          maxLength: 100
+        description:
+          type: string
+          maxLength: 500
+        recurrence:
+          $ref: '#/components/schemas/Recurrence'
+        difficulty:
+          type: string
+          enum: [muito_facil, facil, medio, dificil, muito_dificil]
+        points:
+          type: integer
+          minimum: 0
+          maximum: 100
+        assignedTo:
+          oneOf:
+            - type: string
+            - type: 'null'
+        status:
+          type: string
+          enum: [active, archived]
+          description: Único campo de controle aceito — é como se arquiva/desarquiva.
+
+    CompleteOccurrenceRequest:
+      type: object
+      properties:
+        note:
+          type: string
+          maxLength: 500
+          example: Banheiro limpo e brilhando!
+        completionDate:
+          type: string
+          format: date-time
+          description: |
+            Momento da execução. Default é o instante do servidor. Só é aceito dentro de uma janela
+            curta no passado (registro retroativo de quem esqueceu de marcar).
+          example: '2025-07-05T18:30:00Z'
+
+    SkipOccurrenceRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+          maxLength: 300
+          example: Viajamos no fim de semana.
+
+    RateExecutionRequest:
+      type: object
+      required: [rating]
+      properties:
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+          example: 5
+        note:
+          type: string
+          maxLength: 500
+          description: Comentário do avaliador.
+          example: Ficou ótimo, obrigado!
