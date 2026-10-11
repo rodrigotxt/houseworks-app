@@ -1,185 +1,288 @@
 // tests/tasks.test.js
-// Fase 0 — middleware de auth pelo catalogo, envelope nas tarefas e allow-list de campos.
+// Fase 1b — tarefas escopadas por casa. O primeiro teste e a prova do P1.
 
-const request = require('supertest');
-const jwt = require('jsonwebtoken');
-const app = require('../app');
-const config = require('../config');
-const { registerAndLogin } = require('./helpers/auth');
+const { app, request, bearer, createOwner, addMember } = require('./helpers/auth');
+const { createTask } = require('./helpers/fixtures');
 
-const validTask = { name: 'Limpar banheiro', frequency: 'semanal', difficulty: 'dificil' };
+const TASK_URL = '/api/v1/households/';
 
-describe('autenticacao das rotas privadas', () => {
-  it('sem token -> 401 UNAUTHENTICATED', async () => {
-    const response = await request(app).get('/api/v1/tasks');
+describe('visibilidade e criacao', () => {
+  it('P1: tarefa criada pelo owner e visivel para TODOS os membros da casa', async () => {
+    const owner = await createOwner();
+    const adult = await addMember(owner.token, owner.household.id, 'adult');
+    const child = await addMember(owner.token, owner.household.id, 'child');
 
-    expect(response.status).toBe(401);
-    expect(response.body.error.code).toBe('UNAUTHENTICATED');
+    const criada = await createTask(owner.token, owner.household.id);
+    expect(criada.status).toBe(201);
+
+    // Antes da Fase 1 a listagem filtrava por createdBy: a tarefa do owner era
+    // invisivel para o resto da familia.
+    for (const membro of [owner, adult, child]) {
+      const lista = await request(app)
+        .get(TASK_URL + owner.household.id + '/tasks')
+        .set(bearer(membro.token));
+
+      expect(lista.status).toBe(200);
+      expect(lista.body.data.map((task) => task.name)).toContain('Limpar banheiro');
+    }
   });
 
-  it('token invalido -> 401 TOKEN_INVALID', async () => {
-    const response = await request(app)
-      .get('/api/v1/tasks')
-      .set('Authorization', 'Bearer nao-e-um-jwt');
+  it('child nao cria tarefa -> 403 INSUFFICIENT_ROLE', async () => {
+    const owner = await createOwner();
+    const child = await addMember(owner.token, owner.household.id, 'child');
 
-    expect(response.status).toBe(401);
-    expect(response.body.error.code).toBe('TOKEN_INVALID');
+    const response = await createTask(child.token, owner.household.id);
+
+    expect(response.status).toBe(403);
+    expect(response.body.error.code).toBe('INSUFFICIENT_ROLE');
   });
 
-  it('token expirado -> 401 TOKEN_EXPIRED', async () => {
-    const expired = jwt.sign(
-      { user: { id: '000000000000000000000000' } },
-      config.jwtSecret,
-      { expiresIn: -10 }
-    );
+  it('adult cria tarefa -> 201', async () => {
+    const owner = await createOwner();
+    const adult = await addMember(owner.token, owner.household.id, 'adult');
 
-    const response = await request(app)
-      .get('/api/v1/tasks')
-      .set('Authorization', 'Bearer ' + expired);
-
-    expect(response.status).toBe(401);
-    expect(response.body.error.code).toBe('TOKEN_EXPIRED');
-  });
-
-  it('aceita Authorization: Bearer', async () => {
-    const { token } = await registerAndLogin();
-
-    await request(app).get('/api/v1/tasks').set('Authorization', 'Bearer ' + token).expect(200);
-  });
-
-  it('mantem o header legado x-auth-token', async () => {
-    const { token } = await registerAndLogin();
-
-    await request(app).get('/api/v1/tasks').set('x-auth-token', token).expect(200);
-  });
-});
-
-describe('tarefas', () => {
-  it('cria tarefa -> 201 no envelope { data }', async () => {
-    const { token } = await registerAndLogin();
-
-    const response = await request(app)
-      .post('/api/v1/tasks')
-      .set('Authorization', 'Bearer ' + token)
-      .send(validTask);
+    const response = await createTask(adult.token, owner.household.id);
 
     expect(response.status).toBe(201);
-    expect(response.body.data).toMatchObject(validTask);
-    expect(response.body.data.id).toBeDefined();
+    expect(response.body.data.householdId).toBeUndefined();
+    expect(String(response.body.data.household)).toBe(owner.household.id);
   });
 
-  it('rejeita campo fora do contrato na criacao (status)', async () => {
-    const { token } = await registerAndLogin();
+  it('cada casa so enxerga as proprias tarefas', async () => {
+    const casaA = await createOwner({ name: 'Casa A' });
+    const casaB = await createOwner({ name: 'Casa B' });
 
-    const response = await request(app)
-      .post('/api/v1/tasks')
-      .set('Authorization', 'Bearer ' + token)
-      .send({ ...validTask, status: 'concluida' });
-
-    expect(response.status).toBe(400);
-    expect(response.body.error.code).toBe('VALIDATION_ERROR');
-  });
-
-  it('rejeita frequencia fora do enum', async () => {
-    const { token } = await registerAndLogin();
-
-    const response = await request(app)
-      .post('/api/v1/tasks')
-      .set('Authorization', 'Bearer ' + token)
-      .send({ ...validTask, frequency: 'a_cada_lua_cheia' });
-
-    expect(response.status).toBe(400);
-    expect(response.body.error.details).toEqual(
-      expect.arrayContaining([expect.objectContaining({ field: 'frequency' })])
-    );
-  });
-
-  it('lista apenas as tarefas do proprio usuario', async () => {
-    const { token: tokenA } = await registerAndLogin();
-    const { token: tokenB } = await registerAndLogin();
-
-    await request(app)
-      .post('/api/v1/tasks')
-      .set('Authorization', 'Bearer ' + tokenA)
-      .send(validTask)
-      .expect(201);
+    await createTask(casaA.token, casaA.household.id, { name: 'Tarefa da casa A' });
 
     const listaB = await request(app)
-      .get('/api/v1/tasks')
-      .set('Authorization', 'Bearer ' + tokenB);
+      .get(TASK_URL + casaB.household.id + '/tasks')
+      .set(bearer(casaB.token));
 
     expect(listaB.body.data).toEqual([]);
   });
 
-  it('nao acessa tarefa de outro usuario -> 403 FORBIDDEN', async () => {
-    const { token: tokenA } = await registerAndLogin();
-    const { token: tokenB } = await registerAndLogin();
-
-    const criada = await request(app)
-      .post('/api/v1/tasks')
-      .set('Authorization', 'Bearer ' + tokenA)
-      .send(validTask);
+  it('quem nao e membro -> 403 NOT_HOUSEHOLD_MEMBER', async () => {
+    const owner = await createOwner();
+    const estranho = await createOwner({ name: 'Outra casa' });
 
     const response = await request(app)
-      .get('/api/v1/tasks/' + criada.body.data.id)
-      .set('Authorization', 'Bearer ' + tokenB);
+      .get(TASK_URL + owner.household.id + '/tasks')
+      .set(bearer(estranho.token));
 
     expect(response.status).toBe(403);
-    expect(response.body.error.code).toBe('FORBIDDEN');
+    expect(response.body.error.code).toBe('NOT_HOUSEHOLD_MEMBER');
+  });
+});
+
+describe('campos da tarefa', () => {
+  it('pontos derivam da dificuldade', async () => {
+    const owner = await createOwner();
+
+    const facil = await createTask(owner.token, owner.household.id, { difficulty: 'facil' });
+    const muitoDificil = await createTask(owner.token, owner.household.id, {
+      name: 'Lavar a caixa de agua',
+      difficulty: 'muito_dificil',
+    });
+
+    expect(facil.body.data.points).toBe(2);
+    expect(muitoDificil.body.data.points).toBe(8);
   });
 
-  it('id malformado -> 400 VALIDATION_ERROR (CastError tratado)', async () => {
-    const { token } = await registerAndLogin();
+  it('pontos explicitos sobrepoem a derivacao', async () => {
+    const owner = await createOwner();
 
-    const response = await request(app)
-      .get('/api/v1/tasks/nao-e-um-object-id')
-      .set('Authorization', 'Bearer ' + token);
+    const response = await createTask(owner.token, owner.household.id, {
+      difficulty: 'facil',
+      points: 7,
+    });
+
+    expect(response.body.data.points).toBe(7);
+  });
+
+  it('assignedTo precisa ser membro da casa -> 400', async () => {
+    const owner = await createOwner();
+    const deOutraCasa = await createOwner({ name: 'Casa vizinha' });
+
+    const response = await createTask(owner.token, owner.household.id, {
+      assignedTo: deOutraCasa.household.ownerId,
+    });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error.code).toBe('VALIDATION_ERROR');
+    expect(response.body.error.details).toEqual(
+      expect.arrayContaining([expect.objectContaining({ field: 'assignedTo' })])
+    );
+  });
+
+  it('aceita null em assignedTo (qualquer um pode assumir)', async () => {
+    const owner = await createOwner();
+
+    const response = await createTask(owner.token, owner.household.id, { assignedTo: null });
+
+    expect(response.status).toBe(201);
+    expect(response.body.data.assignedTo).toBeNull();
+  });
+
+  it('rejeita campo fora do contrato (nextDueDate)', async () => {
+    const owner = await createOwner();
+
+    const response = await createTask(owner.token, owner.household.id, {
+      nextDueDate: '2025-12-01',
+    });
 
     expect(response.status).toBe(400);
     expect(response.body.error.code).toBe('VALIDATION_ERROR');
   });
+});
 
-  it('tarefa inexistente -> 404 TASK_NOT_FOUND', async () => {
-    const { token } = await registerAndLogin();
+describe('listagem', () => {
+  it('filtra por assignedTo=unassigned', async () => {
+    const owner = await createOwner();
+    const child = await addMember(owner.token, owner.household.id, 'child');
+
+    await createTask(owner.token, owner.household.id, { name: 'Tarefa de alguem', assignedTo: child.membership.user.id });
+    await createTask(owner.token, owner.household.id, { name: 'Tarefa de todos', assignedTo: null });
 
     const response = await request(app)
-      .get('/api/v1/tasks/000000000000000000000000')
-      .set('Authorization', 'Bearer ' + token);
+      .get(TASK_URL + owner.household.id + '/tasks?assignedTo=unassigned')
+      .set(bearer(owner.token));
+
+    expect(response.body.data.map((task) => task.name)).toEqual(['Tarefa de todos']);
+  });
+
+  it('busca textual por nome', async () => {
+    const owner = await createOwner();
+
+    await createTask(owner.token, owner.household.id, { name: 'Lavar louca' });
+    await createTask(owner.token, owner.household.id, { name: 'Limpar banheiro' });
+
+    const response = await request(app)
+      .get(TASK_URL + owner.household.id + '/tasks?q=louca')
+      .set(bearer(owner.token));
+
+    expect(response.body.data).toHaveLength(1);
+    expect(response.body.data[0].name).toBe('Lavar louca');
+  });
+
+  it('pagina e devolve meta', async () => {
+    const owner = await createOwner();
+
+    for (let index = 1; index <= 3; index += 1) {
+      await createTask(owner.token, owner.household.id, { name: 'Tarefa numero ' + index });
+    }
+
+    const response = await request(app)
+      .get(TASK_URL + owner.household.id + '/tasks?page=1&pageSize=2')
+      .set(bearer(owner.token));
+
+    expect(response.body.data).toHaveLength(2);
+    expect(response.body.meta).toMatchObject({ page: 1, pageSize: 2, total: 3, totalPages: 2 });
+  });
+
+  it('por padrao nao lista tarefas arquivadas', async () => {
+    const owner = await createOwner();
+    const criada = await createTask(owner.token, owner.household.id);
+
+    await request(app)
+      .delete('/api/v1/tasks/' + criada.body.data.id)
+      .set(bearer(owner.token))
+      .expect(204);
+
+    const ativas = await request(app)
+      .get(TASK_URL + owner.household.id + '/tasks')
+      .set(bearer(owner.token));
+    const arquivadas = await request(app)
+      .get(TASK_URL + owner.household.id + '/tasks?status=archived')
+      .set(bearer(owner.token));
+
+    expect(ativas.body.data).toEqual([]);
+    expect(arquivadas.body.data).toHaveLength(1);
+    expect(arquivadas.body.data[0].status).toBe('archived');
+    expect(arquivadas.body.data[0].archivedAt).not.toBeNull();
+  });
+});
+
+describe('tarefa por id', () => {
+  it('adult atualiza; child nao', async () => {
+    const owner = await createOwner();
+    const adult = await addMember(owner.token, owner.household.id, 'adult');
+    const child = await addMember(owner.token, owner.household.id, 'child');
+
+    const criada = await createTask(owner.token, owner.household.id);
+
+    const peloAdult = await request(app)
+      .patch('/api/v1/tasks/' + criada.body.data.id)
+      .set(bearer(adult.token))
+      .send({ name: 'Limpar o banheiro social' });
+
+    expect(peloAdult.status).toBe(200);
+    expect(peloAdult.body.data.name).toBe('Limpar o banheiro social');
+
+    const peloChild = await request(app)
+      .patch('/api/v1/tasks/' + criada.body.data.id)
+      .set(bearer(child.token))
+      .send({ name: 'Nao deveria' });
+
+    expect(peloChild.status).toBe(403);
+    expect(peloChild.body.error.code).toBe('INSUFFICIENT_ROLE');
+  });
+
+  it('mudar a dificuldade re-deriva os pontos', async () => {
+    const owner = await createOwner();
+    const criada = await createTask(owner.token, owner.household.id, { difficulty: 'facil' });
+
+    expect(criada.body.data.points).toBe(2);
+
+    const response = await request(app)
+      .patch('/api/v1/tasks/' + criada.body.data.id)
+      .set(bearer(owner.token))
+      .send({ difficulty: 'muito_dificil' });
+
+    expect(response.body.data.points).toBe(8);
+  });
+
+  it('tarefa de outra casa -> 404 (nao 403: nao vazamos existencia)', async () => {
+    const casaA = await createOwner({ name: 'Casa A' });
+    const casaB = await createOwner({ name: 'Casa B' });
+
+    const criada = await createTask(casaA.token, casaA.household.id);
+
+    const response = await request(app)
+      .get('/api/v1/tasks/' + criada.body.data.id)
+      .set(bearer(casaB.token));
 
     expect(response.status).toBe(404);
     expect(response.body.error.code).toBe('TASK_NOT_FOUND');
   });
 
-  it('DELETE -> 204 sem corpo', async () => {
-    const { token } = await registerAndLogin();
-
-    const criada = await request(app)
-      .post('/api/v1/tasks')
-      .set('Authorization', 'Bearer ' + token)
-      .send(validTask);
+  it('id malformado -> 400 VALIDATION_ERROR', async () => {
+    const owner = await createOwner();
 
     const response = await request(app)
-      .delete('/api/v1/tasks/' + criada.body.data.id)
-      .set('Authorization', 'Bearer ' + token);
-
-    expect(response.status).toBe(204);
-    expect(response.body).toEqual({});
-  });
-
-  it('PUT sem nenhum campo -> 400', async () => {
-    const { token } = await registerAndLogin();
-
-    const criada = await request(app)
-      .post('/api/v1/tasks')
-      .set('Authorization', 'Bearer ' + token)
-      .send(validTask);
-
-    const response = await request(app)
-      .put('/api/v1/tasks/' + criada.body.data.id)
-      .set('Authorization', 'Bearer ' + token)
-      .send({});
+      .get('/api/v1/tasks/nao-e-um-id')
+      .set(bearer(owner.token));
 
     expect(response.status).toBe(400);
     expect(response.body.error.code).toBe('VALIDATION_ERROR');
+  });
+
+  it('excluir definitivamente exige owner', async () => {
+    const owner = await createOwner();
+    const adult = await addMember(owner.token, owner.household.id, 'adult');
+
+    const criada = await createTask(owner.token, owner.household.id);
+
+    const peloAdult = await request(app)
+      .delete('/api/v1/tasks/' + criada.body.data.id + '?hard=true')
+      .set(bearer(adult.token));
+
+    expect(peloAdult.status).toBe(403);
+    expect(peloAdult.body.error.code).toBe('INSUFFICIENT_ROLE');
+
+    const peloOwner = await request(app)
+      .delete('/api/v1/tasks/' + criada.body.data.id + '?hard=true')
+      .set(bearer(owner.token));
+
+    expect(peloOwner.status).toBe(204);
   });
 });

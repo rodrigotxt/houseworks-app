@@ -1,22 +1,21 @@
 // schemas/task.js
-// Entrada de POST /tasks e PUT /tasks/:id.
-//
-// Fase 0 valida o formato ATUAL do modelo (frequency como string).
-// Na Fase 2 o contrato passa a exigir o objeto "recurrence" (docs/openapi.yaml) e este
-// schema acompanha. O que ja vale aqui: allow-list estrita de campos, que fecha o
-// mass-assignment (o baseline aceitava "status" arbitrario vindo do corpo).
+// Entrada das rotas de tarefa (docs/openapi.yaml).
+// Fase 2 troca "frequency" pelo objeto "recurrence".
 
 const { z } = require('zod');
-
-const FREQUENCIES = ['diaria', 'semanal', 'mensal', 'anual', 'ocasional'];
-const DIFFICULTIES = ['muito_facil', 'facil', 'medio', 'dificil', 'muito_dificil'];
-const STATUSES = ['pendente', 'concluida', 'em_andamento'];
+const { objectId } = require('./common');
+const { FREQUENCIES, DIFFICULTIES, STATUSES } = require('../models/Task');
 
 const name = z
   .string()
   .trim()
   .min(3, { message: 'O nome da tarefa deve ter no minimo 3 caracteres.' })
   .max(100, { message: 'O nome da tarefa deve ter no maximo 100 caracteres.' });
+
+const description = z
+  .string()
+  .trim()
+  .max(500, { message: 'A descricao deve ter no maximo 500 caracteres.' });
 
 const frequency = z.enum(FREQUENCIES, {
   message: 'A frequencia deve ser diaria, semanal, mensal, anual ou ocasional.',
@@ -27,27 +26,62 @@ const difficulty = z.enum(DIFFICULTIES, {
 });
 
 const status = z.enum(STATUSES, {
-  message: 'O status deve ser pendente, concluida ou em_andamento.',
+  message: 'O status deve ser active ou archived.',
 });
 
-const createTaskSchema = z.strictObject({ name, frequency, difficulty });
+const points = z
+  .number()
+  .int({ message: 'Os pontos devem ser um numero inteiro.' })
+  .min(0, { message: 'Os pontos nao podem ser negativos.' })
+  .max(100, { message: 'Os pontos devem ser no maximo 100.' });
 
-// nextDueDate e lastCompletedDate NAO sao aceitos: sao derivados (contrato os marca
-// como somente-leitura). Ninguem os define pelo corpo.
+// null = qualquer membro pode assumir.
+const assignedTo = objectId.nullable();
+
+const createTaskSchema = z.strictObject({
+  name,
+  description: description.optional(),
+  frequency,
+  difficulty,
+  points: points.optional(),
+  assignedTo: assignedTo.optional(),
+});
+
 const updateTaskSchema = z
   .strictObject({
     name: name.optional(),
+    description: description.optional(),
     frequency: frequency.optional(),
     difficulty: difficulty.optional(),
+    points: points.optional(),
+    assignedTo: assignedTo.optional(),
     status: status.optional(),
   })
   .refine((value) => Object.keys(value).length > 0, {
     message: 'Informe ao menos um campo para atualizar.',
   });
 
+const listTasksQuerySchema = z.strictObject({
+  status: status.optional(),
+  // "unassigned" filtra as tarefas sem responsavel fixo.
+  assignedTo: z.union([z.literal('unassigned'), objectId]).optional(),
+  frequency: frequency.optional(),
+  difficulty: difficulty.optional(),
+  q: z
+    .string()
+    .trim()
+    .min(2, { message: 'A busca deve ter no minimo 2 caracteres.' })
+    .max(100, { message: 'A busca deve ter no maximo 100 caracteres.' })
+    .optional(),
+  sort: z.string().trim().optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(20),
+});
+
 module.exports = {
   createTaskSchema,
   updateTaskSchema,
+  listTasksQuerySchema,
   FREQUENCIES,
   DIFFICULTIES,
   STATUSES,

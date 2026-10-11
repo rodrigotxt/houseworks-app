@@ -5,6 +5,8 @@
 
 const Household = require('../models/Household');
 const Membership = require('../models/Membership');
+const Task = require('../models/Task');
+const TaskExecutionHistory = require('../models/TaskExecutionHistory');
 const ApiError = require('../utils/apiError');
 const ErrorCode = require('../utils/errorCodes');
 const { ok, created, noContent } = require('../utils/respond');
@@ -133,9 +135,13 @@ exports.remove = async (req, res) => {
 
   const householdId = req.household._id;
 
-  // TODO(Fase 1b): incluir Task e TaskExecutionHistory na cascata assim que ambos
-  // passarem a carregar "household".
-  await Membership.deleteMany({ household: householdId });
+  // Cascata completa. Apagar so a casa deixaria tarefas e execucoes orfas,
+  // visiveis para ninguem e ocupando indice.
+  await Promise.all([
+    Membership.deleteMany({ household: householdId }),
+    Task.deleteMany({ household: householdId }),
+    TaskExecutionHistory.deleteMany({ household: householdId }),
+  ]);
   await Household.deleteOne({ _id: householdId });
 
   return noContent(res);

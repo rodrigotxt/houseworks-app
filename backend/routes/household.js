@@ -5,6 +5,8 @@ const express = require('express');
 const router = express.Router();
 
 const householdController = require('../controllers/householdController');
+const householdTaskRoutes = require('./householdTask');
+const householdExecutionRoutes = require('./householdExecution');
 const { requireAuth } = require('../middlewares/auth');
 const { requireMember, requireRole } = require('../middlewares/membership');
 const validate = require('../middlewares/validate');
@@ -84,6 +86,10 @@ router.delete(
   requireMember,
   asyncHandler(householdController.removeMember)
 );
+
+// Rotas aninhadas: /households/:householdId/tasks e /households/:householdId/executions
+router.use('/:householdId/tasks', householdTaskRoutes);
+router.use('/:householdId/executions', householdExecutionRoutes);
 
 // @route   GET /households/:householdId
 // @desc    Detalhe da casa

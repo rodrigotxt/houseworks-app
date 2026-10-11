@@ -12,7 +12,7 @@ const { ok } = require('../utils/respond');
 const authRoutes = require('./auth');
 const householdRoutes = require('./household');
 const taskRoutes = require('./task');
-const taskExecutionHistoryRoutes = require('./taskExecutionHistory');
+const executionRoutes = require('./execution');
 
 // GET /health — smoke test de integracao e healthcheck do container. Nao exige autenticacao.
 router.get('/health', (req, res) => {
@@ -38,11 +38,11 @@ router.get('/health', (req, res) => {
 });
 
 router.use('/auth', authRoutes);
+
+// /households tambem monta as rotas aninhadas de tarefas e execucoes.
 router.use('/households', householdRoutes);
 
-// Rotas ainda nao escopadas por casa. A Fase 1b as move para
-// /households/:householdId/tasks e /executions/:id (ver docs/ROADMAP.md).
 router.use('/tasks', taskRoutes);
-router.use('/tasks-executions', taskExecutionHistoryRoutes);
+router.use('/executions', executionRoutes);
 
 module.exports = router;

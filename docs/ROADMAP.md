@@ -33,6 +33,10 @@ Auditoria do estado atual em `main` (último commit `e2aa0dc`, 2025-06-24).
 | P11 | Contrato de auth quebrado | Backend assina `{ user: {...} }`; front tipa `{ id, email, ... }` e lê `user.email` | Dashboard renderiza `undefined`. |
 | P12 | Ambiguidade de repositório | `houseworks-app/frontend/` é submódulo vazio + clone solto em `houseworks-frontend/` | Duas fontes de verdade que vão divergir. |
 
+**Resolvidos até aqui (Fases 0 e 1):** P1, P2, P3, P4, P6, P7 e P10.
+**Pendentes:** P5 e P8 (Fase 2), P9 e P12 (Fase 5), P11 (parcial — o backend já expõe `/auth/me`; falta o
+front parar de decodificar o JWT por conta própria).
+
 ---
 
 ## 2. Decisões de arquitetura
@@ -95,10 +99,10 @@ o spec valida no CI e cobre 100% das rotas implementadas.
 memória por arquivo — `app.js` não conecta sozinho; quem conecta é `server.js`.
 
 **Aderência parcial ao contrato — esperado nesta fase.** A Fase 0 alinha o *envelope*, o *catálogo de
-erros* e a *validação*. Os **formatos dos recursos** ainda são os do modelo antigo e convergem nas fases
-seguintes: `Task.frequency` ainda é string (o contrato pede o objeto `recurrence` — Fase 2), a posse ainda
-é por `createdBy` e não por `Household` (Fase 1), e `TaskExecutionHistory` ainda não tem `ratedBy`
-(Fase 3). Já alinhado: `id` em vez de `_id`, sem `__v` e sem `password` na resposta.
+erros* e a *validação*. Os **formatos dos recursos** convergem nas fases seguintes. Ao fim da Fase 1, o que
+ainda diverge é: `Task.frequency` é string (o contrato pede o objeto `recurrence` — Fase 2) e
+`TaskExecutionHistory` não tem `status`, `ratedBy` nem `occurrenceId` (Fase 3). Já alinhado: `id` em vez
+de `_id`, sem `__v`, sem `password`, e visibilidade por casa em vez de por criador.
 
 ### Fase 1 — Fundação do domínio  ·  *primeiro commit de negócio*
 
@@ -112,15 +116,21 @@ seguintes: `Task.frequency` ainda é string (o contrato pede o objeto `recurrenc
 - [x] Índices `Membership{user,household}` (unique) e `Membership{household,role}`
 - [x] Isolamento entre casas provado por teste (não-membro → `403 NOT_HOUSEHOLD_MEMBER`)
 
-**Fase 1b — tarefas escopadas e fim do furo P4** *(pendente)*
+**Fase 1b — tarefas escopadas e fim do furo P4** ✅
 
-- [ ] `Task` ganha `household`, `assignedTo`, `points`, `archivedAt`; `status` vira `active | archived`
-- [ ] `TaskExecutionHistory` ganha `household` — **é isto que fecha o P4**
-- [ ] **Eliminar as cópias restantes da checagem de ownership** (P6) nos controllers
-- [ ] Rotas de tarefa passam para `/households/{householdId}/tasks` e `/tasks/{taskId}`
-- [ ] Cascata de `DELETE /households/{id}` passa a incluir tarefas e execuções
-- [ ] Seed reescrito para o modelo novo (não há base real a migrar — decisão do projeto)
-- [ ] Índices `Task{household,archivedAt}` e `Task{household,assignedTo}`
+- [x] `Task` ganha `household`, `assignedTo`, `points`, `archivedAt`; `status` vira `active | archived`
+- [x] `TaskExecutionHistory` ganha `household` — **é isto que fecha o P4**
+- [x] Checagens de posse eliminadas: o escopo vem de `requireMember` ou do próprio recurso (`loadTask` / `loadExecution`)
+- [x] Rotas de tarefa em `/households/{householdId}/tasks` e `/tasks/{taskId}`
+- [x] Cascata de `DELETE /households/{id}` inclui tarefas e execuções
+- [x] Seed reescrito para o modelo novo (verificado ponta a ponta: 5 usuários, 1 casa, 5 memberships, 5 tarefas, 2 execuções)
+- [x] Índices `Task{household,status}`, `Task{household,assignedTo}`, `TaskExecutionHistory{household,completionDate}`
+- [x] `routes/other.js` (código morto do baseline) removido
+
+**Efeito colateral deliberado:** `POST /tasks-executions` deixou de existir. No contrato, criar execução
+acontece ao concluir uma ocorrência (`POST /occurrences/{id}/complete`), que chega na Fase 3. Entre a 1b e a
+Fase 3 **não há como marcar uma tarefa como feita pela API** — aceitável enquanto não há front nem usuários, e
+preferível a manter um endpoint que o contrato não tem. Os testes da 1b semeiam execuções direto no modelo.
 
 **Aceite (testes de integração obrigatórios):**
 membro de outra casa recebe `403 NOT_HOUSEHOLD_MEMBER`/404 em **todas** as rotas;
