@@ -1,1 +1,7 @@
 .history
+
+# Segredos e estado local — nunca versionar.
+# O .env.example fica versionado de proposito: e o molde, sem valor real nenhum.
+.env
+.env.*
+!.env.example

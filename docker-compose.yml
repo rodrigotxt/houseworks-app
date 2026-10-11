@@ -24,11 +24,18 @@ services:
       MONGO_URI: mongodb://${MONGO_USER}:${MONGO_PASSWORD}@mongodb:27017/${MONGO_DB_NAME}?authSource=admin
       JWT_SECRET: ${JWT_SECRET_KEY}
       PORT: 3000
+      # Sem ALLOWED_ORIGINS o navegador nao consegue falar com a API a partir do front.
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-3600}
     volumes:
       - ./backend:/app
       - /app/node_modules
+    # Opcional de proposito: o compose antigo falhava com "env file not found" quando
+    # este arquivo nao existia, e nada aqui e obrigatorio — o bloco acima ja cobre o
+    # que o backend precisa. Serve para quem quiser variaveis extras locais.
     env_file:
-      - ./backend/.env
+      - path: ./backend/.env
+        required: false
     depends_on:
       - mongodb
     restart: unless-stopped
@@ -43,11 +50,16 @@ services:
     environment:
       NODE_ENV: development
       CHOKIDAR_USEPOLLING: "true"
+      # O browser roda FORA da rede do compose: precisa do endereco publicado no host
+      # (3001), nao do nome do servico. Sem esta variavel o front sobe sem saber onde
+      # esta a API e toda chamada falha.
+      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:3001}
     volumes:
       - ./frontend:/app
       - /app/node_modules
     env_file:
-      - ./frontend/.env
+      - path: ./frontend/.env
+        required: false
     depends_on:
       - backend
     restart: unless-stopped

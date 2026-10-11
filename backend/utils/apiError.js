@@ -33,6 +33,14 @@ class ApiError extends Error {
     return new ApiError(409, code || ErrorCode.CONFLICT, message);
   }
 
+  static tooManyRequests(message) {
+    return new ApiError(
+      429,
+      ErrorCode.RATE_LIMITED,
+      message || 'Muitas tentativas. Tente novamente em instantes.'
+    );
+  }
+
   static internal(message) {
     return new ApiError(500, ErrorCode.INTERNAL_ERROR, message || 'Erro interno do servidor.');
   }

@@ -9,11 +9,18 @@ const Membership = require('../models/Membership');
 const config = require('../config');
 const ApiError = require('../utils/apiError');
 const ErrorCode = require('../utils/errorCodes');
-const { created, ok } = require('../utils/respond');
+const { created, ok, noContent } = require('../utils/respond');
 const { generateInviteCode, inviteExpiry } = require('../utils/inviteCode');
+const {
+  signToken,
+  revoke,
+  setAuthCookie,
+  clearAuthCookie,
+} = require('../utils/tokens');
 
-// 1h. Precisa bater com o expiresIn anunciado no contrato e com o front (ROADMAP C1).
-const TOKEN_TTL_SECONDS = 3600;
+// Validade configuravel (JWT_EXPIRES_IN em segundos), 1h por padrao. E o mesmo valor
+// anunciado no campo expiresIn da resposta e na validade do cookie.
+const TOKEN_TTL_SECONDS = config.tokenTtlSeconds;
 
 // Nunca serializar o hash da senha. Projecao explicita, nao delete de campo.
 function publicUser(user) {
@@ -93,11 +100,41 @@ exports.loginUser = async (req, res) => {
     throw ApiError.unauthenticated('Credenciais invalidas.', ErrorCode.INVALID_CREDENTIALS);
   }
 
-  // O token carrega apenas a identidade. Casa e papel sao resolvidos por requisicao
-  // contra a Membership, porque um usuario pode pertencer a varias casas.
-  const token = jwt.sign({ sub: user.id }, config.jwtSecret, { expiresIn: TOKEN_TTL_SECONDS });
+  // O token carrega apenas a identidade e o jti. Casa e papel sao resolvidos por
+  // requisicao contra a Membership, porque um usuario pode pertencer a varias casas.
+  const { token } = signToken(user);
+
+  // Browser usa o cookie httpOnly; clientes nao-browser usam o token do corpo.
+  setAuthCookie(res, token);
 
   return ok(res, { token, expiresIn: TOKEN_TTL_SECONDS, user: publicUser(user) });
+};
+
+// @desc    Encerrar sessao
+// @route   POST /api/v1/auth/logout
+// @access  Privado
+// Nao basta apagar o cookie: o token e revogado pelo jti, senao continuaria valido
+// para quem ja o tivesse copiado.
+exports.logoutUser = async (req, res) => {
+  await revoke(req.token.decoded, 'logout');
+  clearAuthCookie(res);
+
+  return noContent(res);
+};
+
+// @desc    Renovar o token
+// @route   POST /api/v1/auth/refresh
+// @access  Privado
+// Rotaciona: o token apresentado e revogado e um novo e emitido, para que uma sessao
+// renovada nao deixe dois tokens validos circulando.
+exports.refreshToken = async (req, res) => {
+  await revoke(req.token.decoded, 'refresh');
+
+  const { token } = signToken(req.user);
+
+  setAuthCookie(res, token);
+
+  return ok(res, { token, expiresIn: TOKEN_TTL_SECONDS });
 };
 
 // @desc    Usuario autenticado e suas memberships

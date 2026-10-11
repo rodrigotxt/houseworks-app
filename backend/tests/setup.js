@@ -7,6 +7,11 @@
 process.env.NODE_ENV = 'test';
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'segredo-de-teste-nao-usar-em-producao';
 
+// A suite inteira faz centenas de login/registro; sem desligar o limite, os testes
+// esbarrariam no 429. O arquivo que testa o proprio limite o religa antes de importar
+// o app (tests/hardening.test.js).
+process.env.RATE_LIMIT_ENABLED = process.env.RATE_LIMIT_ENABLED || 'false';
+
 const db = require('./helpers/db');
 
 beforeAll(async () => {
