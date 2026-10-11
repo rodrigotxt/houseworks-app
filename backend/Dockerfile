@@ -17,7 +17,11 @@ COPY package*.json ./
 # ---------------------------------------------------------------- desenvolvimento
 FROM base AS development
 ENV NODE_ENV=development
-RUN npm ci
+# --omit=dev TAMBEM aqui, de propósito: o container roda o servidor, não os testes.
+# Instalar as ferramentas de teste custaria ~120MB de download (o MongoDB em memória
+# baixa um binário próprio) a cada build, para nada. Os testes rodam no host —
+# "cd backend && npm test" — e é assim que o CI também faz.
+RUN npm ci --omit=dev && npm install --no-save nodemon
 COPY . .
 EXPOSE 3000 9229
 CMD ["./node_modules/.bin/nodemon", "--inspect=0.0.0.0:9229", "server.js"]

@@ -66,6 +66,10 @@ services:
       # (3001), nao do nome do servico. Sem esta variavel o front sobe sem saber onde
       # esta a API e toda chamada falha.
       NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:3001}
+      # Para o RENDER NO SERVIDOR: dentro da rede do compose, o front alcanca a API pelo
+      # nome do serviço. Sem isto o SSR tentaria localhost:3001, que dentro do container
+      # do front é ele mesmo — e toda tela autenticada cairia em erro.
+      API_INTERNAL_URL: http://backend:3000
     volumes:
       - ../houseworks-frontend:/app
       - /app/node_modules
