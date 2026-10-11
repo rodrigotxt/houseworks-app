@@ -43,9 +43,14 @@ services:
       - mongodb
     restart: unless-stopped
 
+  # O frontend vive em um REPOSITORIO IRMAO (../houseworks-frontend), nao dentro deste.
+  # O workspace do VS Code (HouseWorks.code-workspace) ja espera os dois lado a lado.
+  #
+  # Consequencia pratica: "docker compose up" precisa dos dois checkouts. Para trabalhar
+  # so na API, use "docker compose up -d mongodb backend".
   frontend:
     build:
-      context: ./frontend
+      context: ../houseworks-frontend
       dockerfile: Dockerfile
     container_name: frontend-app
     ports:
@@ -58,10 +63,10 @@ services:
       # esta a API e toda chamada falha.
       NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:3001}
     volumes:
-      - ./frontend:/app
+      - ../houseworks-frontend:/app
       - /app/node_modules
     env_file:
-      - path: ./frontend/.env
+      - path: ../houseworks-frontend/.env
         required: false
     depends_on:
       - backend

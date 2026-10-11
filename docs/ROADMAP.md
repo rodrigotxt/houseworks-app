@@ -4,7 +4,11 @@
 >
 > **Status: as seis fases estão concluídas e a API cobre o contrato inteiro** — as 36 operações
 > declaradas respondem (verificado batendo em cada rota do `openapi.yaml`; nenhuma cai em
-> `ROUTE_NOT_FOUND`). O que resta antes de começar a UI é uma decisão de repositório, o item P12.
+> `ROUTE_NOT_FOUND`). Todos os problemas do baseline estão resolvidos.
+>
+> **Layout de repositórios (decidido):** `houseworks-app` (API) e `houseworks-frontend` são **repos
+> irmãos**, lado a lado. O submódulo foi removido — ele nunca foi inicializado e criava duas fontes
+> de verdade para o mesmo código. O `docker-compose.yml` referencia o irmão por `../houseworks-frontend`.
 > Nenhuma regra de negócio nasce no frontend: o front apenas consome o que está especificado aqui.
 > Ordem de execução: **API 100% pronta → depois o frontend.**
 
@@ -38,9 +42,10 @@ Auditoria do estado atual em `main` (último commit `e2aa0dc`, 2025-06-24).
 | P12 | Ambiguidade de repositório | `houseworks-app/frontend/` é submódulo vazio + clone solto em `houseworks-frontend/` | Duas fontes de verdade que vão divergir. |
 
 **Resolvidos até aqui (Fases 0 a 5):** P1, P2, P3, P4, P5, P6, P7, P8, **P9** e P10.
-**Pendentes:** **P12** (submódulo vs repos irmãos — decisão de repositório, não de código) e **P11**
-parcial: o backend já expõe `/auth/me` e aceita cookie httpOnly; falta o front parar de decodificar o
-JWT por conta própria.
+**Pendente apenas o P11 parcial:** o backend já expõe `/auth/me` e aceita cookie httpOnly; falta o
+front parar de decodificar o JWT por conta própria — trabalho da UI, não da API.
+
+O **P12** foi resolvido: submódulo removido e os dois repositórios passam a ser **irmãos**.
 
 ---
 
@@ -307,7 +312,7 @@ A API está "100% pronta" quando, para cada rota do contrato:
 |---|---|---|
 | C1 | JWT incompatível: backend `{ user: {...} }` vs front `{ id, email, ... }` | Backend define os claims (`sub`, `householdId`, `role`); front apenas consome. |
 | C2 | `docker-compose` não define `NEXT_PUBLIC_API_BASE_URL` e `env_file: ./frontend/.env` não existe | Corrigir o serviço `frontend` antes do primeiro boot integrado. |
-| C3 | Ambiguidade submódulo vs clone solto (P12) | Decidir: repos irmãos (recomendado) ou submódulo inicializado. Uma única fonte de verdade. |
+| C3 | ~~Ambiguidade submódulo vs clone solto~~ **RESOLVIDO** | Submódulo removido; repos **irmãos**. O compose aponta para `../houseworks-frontend`. |
 | C4 | Auth por `x-auth-token` (hoje) vs cookie httpOnly (front) | Contrato final: cookie `jwt_token` (httpOnly) **e** `Authorization: Bearer` para clientes não-browser. |
 | C5 | Sem CORS por ambiente | `ALLOWED_ORIGINS` via env; `localhost:3000` só em dev. |
 
