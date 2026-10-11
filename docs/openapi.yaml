@@ -1862,10 +1862,12 @@ components:
           example: semanal
         interval:
           type: integer
-          description: A cada N períodos. `2` com `semanal` significa quinzenal.
-          default: 1
-          minimum: 1
-          example: 1
+          description: |
+            A cada N períodos. `2` com `semanal` significa quinzenal.
+
+            Opcional na entrada (padrão **1**): quem preenche é o servidor. Não é marcado com
+            `default` de propósito — um `default` no contrato faz geradores de cliente tratarem
+            o campo como obrigatório, e ele não é.
         weekdays:
           type: array
           description: Obrigatório quando `frequency` é `semanal`. Índices no padrão do JavaScript (domingo = 0).
@@ -2327,7 +2329,6 @@ components:
         timezone:
           type: string
           description: Fuso da casa criada. Ignorado se `householdName` não for informado.
-          default: America/Sao_Paulo
 
     LoginRequest:
       type: object
@@ -2371,22 +2372,18 @@ components:
           example: Casa dos Martins
         timezone:
           type: string
-          default: America/Sao_Paulo
         ratingWindowHours:
           type: integer
           minimum: 1
           maximum: 720
-          default: 72
         overdueGraceHours:
           type: integer
           minimum: 0
           maximum: 168
-          default: 0
         horizonDays:
           type: integer
           minimum: 1
           maximum: 365
-          default: 30
 
     UpdateHouseholdRequest:
       type: object
@@ -2421,7 +2418,6 @@ components:
         role:
           type: string
           enum: [adult, child]
-          default: child
           description: Papel inicial. `owner` não pode ser auto-atribuído no ingresso.
 
     UpdateMemberRequest:
@@ -2473,7 +2469,6 @@ components:
         assignmentStrategy:
           type: string
           enum: [fixed, rotate]
-          default: fixed
           description: |
             Com `rotate`, `assignedTo` precisa ser nulo — o rodízio escolhe a cada ocorrência.
 

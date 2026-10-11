@@ -44,8 +44,39 @@ describe('visibilidade e criacao', () => {
     const response = await createTask(adult.token, owner.household.id);
 
     expect(response.status).toBe(201);
-    expect(response.body.data.householdId).toBeUndefined();
-    expect(String(response.body.data.household)).toBe(owner.household.id);
+    expect(response.body.data.householdId).toBe(owner.household.id);
+  });
+
+  // Este teste existe porque a divergencia ja aconteceu: a API devolvia o id cru onde o
+  // contrato promete um objeto. Escrever a tela de tarefas foi o que revelou.
+  it('a forma segue o contrato: householdId e UserRef, nunca ids crus', async () => {
+    const owner = await createOwner();
+    const child = await addMember(owner.token, owner.household.id, 'child');
+
+    const criada = await createTask(owner.token, owner.household.id, {
+      assignedTo: child.membership.user.id,
+    });
+
+    // householdId e string; a referencia crua nao vaza
+    expect(criada.body.data.householdId).toBe(owner.household.id);
+    expect(criada.body.data.household).toBeUndefined();
+
+    // assignedTo e createdBy sao objetos prontos para exibir
+    expect(criada.body.data.assignedTo).toEqual({
+      id: child.membership.user.id,
+      name: child.user.name,
+      username: child.user.username,
+    });
+    expect(criada.body.data.createdBy.id).toBe(owner.household.ownerId);
+
+    // e o mesmo vale na leitura da lista
+    const lista = await request(app)
+      .get(TASK_URL + owner.household.id + '/tasks')
+      .set(bearer(owner.token));
+
+    expect(lista.body.data[0].householdId).toBe(owner.household.id);
+    expect(lista.body.data[0].assignedTo.name).toBe(child.user.name);
+    expect(lista.body.data[0].household).toBeUndefined();
   });
 
   it('cada casa so enxerga as proprias tarefas', async () => {
@@ -121,6 +152,7 @@ describe('campos da tarefa', () => {
 
     expect(response.status).toBe(201);
     expect(response.body.data.assignedTo).toBeNull();
+    expect(response.body.data.householdId).toBe(owner.household.id);
   });
 
   it('rejeita campo fora do contrato (nextDueDate)', async () => {

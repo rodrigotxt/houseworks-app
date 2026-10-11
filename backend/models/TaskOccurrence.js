@@ -75,8 +75,8 @@ const TaskOccurrenceSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
-    toObject: createJsonOptions(),
-    toJSON: createJsonOptions(),
+    toObject: createJsonOptions({ omit: ['household'] }),
+    toJSON: createJsonOptions({ omit: ['household'] }),
   }
 );
 
@@ -88,6 +88,12 @@ TaskOccurrenceSchema.index({ household: 1, dueDate: 1, status: 1 });
 
 // "Minhas tarefas" e a rotacao de responsavel.
 TaskOccurrenceSchema.index({ household: 1, assignedTo: 1, dueDate: 1 });
+
+// Mesmo padrao da Membership: o cliente recebe o identificador, nao a referencia crua.
+TaskOccurrenceSchema.virtual('householdId').get(function householdId() {
+  if (!this.household) return undefined;
+  return String(this.household._id || this.household);
+});
 
 // O contrato expoe taskId alem do resumo "task".
 TaskOccurrenceSchema.virtual('taskId').get(function taskId() {

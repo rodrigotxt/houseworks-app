@@ -15,6 +15,13 @@ const { refreshHousehold, resetFutureOccurrences } = require('../services/occurr
 
 const TASK_SORT_FIELDS = ['name', 'createdAt', 'updatedAt', 'points', 'difficulty'];
 
+// O contrato define assignedTo e createdBy como UserRef (objeto), nao como id solto.
+// Sem isto o cliente recebe uma string e nao consegue mostrar o nome do responsavel.
+const TASK_POPULATE = [
+  { path: 'assignedTo', select: 'name username' },
+  { path: 'createdBy', select: 'name username' },
+];
+
 // O responsavel precisa ser membro da casa: sem isso a tarefa ficaria designada a
 // alguem que nem enxerga a casa.
 async function assertMemberOfHousehold(householdId, userId) {
@@ -67,6 +74,7 @@ exports.create = async (req, res) => {
 
   // Materializa as ocorrencias ja na criacao: a agenda responde sem depender do job.
   await refreshHousehold(req.household);
+  await task.populate(TASK_POPULATE);
 
   return created(res, task);
 };
@@ -95,7 +103,11 @@ exports.list = async (req, res) => {
   const sortSpec = buildSort(sort, TASK_SORT_FIELDS, '-createdAt');
 
   const [items, total] = await Promise.all([
-    Task.find(filter).sort(sortSpec).skip(skipFor(page, pageSize)).limit(pageSize),
+    Task.find(filter)
+      .populate(TASK_POPULATE)
+      .sort(sortSpec)
+      .skip(skipFor(page, pageSize))
+      .limit(pageSize),
     Task.countDocuments(filter),
   ]);
 
@@ -106,6 +118,8 @@ exports.list = async (req, res) => {
 // @route   GET /api/v1/tasks/:taskId
 // @access  Membro da casa da tarefa
 exports.getById = async (req, res) => {
+  await req.task.populate(TASK_POPULATE);
+
   return ok(res, req.task);
 };
 
@@ -161,6 +175,8 @@ exports.update = async (req, res) => {
     await resetFutureOccurrences(task, { timezone: req.household.timezone });
     await refreshHousehold(req.household);
   }
+
+  await task.populate(TASK_POPULATE);
 
   return ok(res, task);
 };

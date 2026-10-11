@@ -115,8 +115,8 @@ const TaskExecutionSchema = new mongoose.Schema(
   {
     timestamps: true,
     // dueDate e interno: o contrato expoe occurrenceId, e o vencimento vem da ocorrencia.
-    toObject: createJsonOptions({ omit: ['dueDate'] }),
-    toJSON: createJsonOptions({ omit: ['dueDate'] }),
+    toObject: createJsonOptions({ omit: ['dueDate', 'household'] }),
+    toJSON: createJsonOptions({ omit: ['dueDate', 'household'] }),
   }
 );
 
@@ -130,6 +130,11 @@ TaskExecutionSchema.index({ household: 1, status: 1, completionDate: 1 });
 
 TaskExecutionSchema.index({ occurrence: 1, completionDate: -1 });
 TaskExecutionSchema.index({ task: 1, completionDate: -1 });
+
+TaskExecutionSchema.virtual('householdId').get(function householdId() {
+  if (!this.household) return undefined;
+  return String(this.household._id || this.household);
+});
 
 TaskExecutionSchema.virtual('taskId').get(function taskId() {
   if (!this.task) return undefined;

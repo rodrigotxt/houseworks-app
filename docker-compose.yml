@@ -1,6 +1,10 @@
 services:
   mongodb:
-    image: mongo:latest
+    # Versao FIXA de proposito. O "latest" apontava para uma versao que se recusa a
+    # subir em kernels 6.19+ ("MongoDB cannot start: Linux kernel versions 6.19 and newer
+    # has a known incompatibility"), e o estrago aparecia como "backend nao conecta" —
+    # sintoma longe da causa. Infra fixa, nao flutuante.
+    image: mongo:8.2
     container_name: mongodb
     ports:
       - "27017:27017"

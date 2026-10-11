@@ -160,8 +160,9 @@ const TaskSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
-    toObject: createJsonOptions({ omit: ['occurrencesGeneratedUntil'] }),
-    toJSON: createJsonOptions({ omit: ['occurrencesGeneratedUntil'] }),
+    // O contrato expoe householdId (string) e nao o objeto household.
+    toObject: createJsonOptions({ omit: ['occurrencesGeneratedUntil', 'household'] }),
+    toJSON: createJsonOptions({ omit: ['occurrencesGeneratedUntil', 'household'] }),
   }
 );
 
@@ -181,6 +182,13 @@ TaskSchema.pre('validate', function prepareTask(next) {
   }
 
   next();
+});
+
+// Mesmo padrao da Membership: o cliente recebe o identificador, nao a referencia crua.
+// Nao usar ".id" aqui: em um ObjectId cru ele devolve o buffer binario, nao o hexadecimal.
+TaskSchema.virtual('householdId').get(function householdId() {
+  if (!this.household) return undefined;
+  return String(this.household._id || this.household);
 });
 
 const Task = mongoose.model('Task', TaskSchema);
