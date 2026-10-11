@@ -1,0 +1,34 @@
+# Caddyfile — TLS automático e um domínio só para o app inteiro.
+#
+# O domínio vem do ambiente (DOMAIN no .env.prod). O e-mail é para o Let's Encrypt avisar
+# se o certificado estiver perto de expirar.
+
+{
+	email {$ACME_EMAIL}
+}
+
+{$DOMAIN} {
+	encode gzip
+
+	# A API vive sob /api NESTE MESMO domínio.
+	#
+	# Repare que é `handle` e não `handle_path`: o prefixo /api é PRESERVADO, porque o
+	# backend serve as rotas em /api/v1/... Se fosse handle_path, o prefixo seria removido
+	# e a API responderia 404 em tudo.
+	handle /api/* {
+		reverse_proxy backend:3000
+	}
+
+	# Todo o resto é o Next.js.
+	handle {
+		reverse_proxy frontend:3000
+	}
+
+	# Cabeçalhos que o Caddy não põe sozinho e que valem para um app autenticado.
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+}

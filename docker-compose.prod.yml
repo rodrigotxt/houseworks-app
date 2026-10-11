@@ -1,0 +1,99 @@
+# docker-compose.prod.yml — a stack de PRODUÇÃO.
+#
+#   cp .env.prod.example .env.prod
+#   docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
+#
+# Diferenças em relação ao compose de desenvolvimento, e por quê:
+#
+#   • Nada além do proxy publica porta. Em desenvolvimento o Mongo fica exposto em 27017 —
+#     em produção isso é um banco aberto na internet.
+#   • Os dois serviços rodam o alvo `production` do Dockerfile: sem ferramentas de teste,
+#     sem nodemon, sem bind mount do código.
+#   • UM domínio só, com a API sob /api. Isso não é economia de certificado: front e API no
+#     mesmo domínio são "same-site", e é o que faz o cookie de sessão (SameSite=Lax, secure)
+#     ser enviado. Em domínios diferentes o navegador descarta o cookie e o login falha sem
+#     dizer por quê.
+#   • O Caddy cuida do TLS sozinho (Let's Encrypt), então não há etapa manual de certificado.
+
+# Nome de projeto próprio: sem isto, este arquivo e o docker-compose.yml de
+# desenvolvimento compartilhariam o mesmo projeto e um derrubaria os containers do outro.
+name: houseworks-prod
+
+services:
+  mongodb:
+    image: mongo:8.2
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD}
+    volumes:
+      - mongo-data:/data/db
+    # Sem "ports": o banco só é alcançável pela rede interna do compose.
+    healthcheck:
+      test: ['CMD', 'mongosh', '--quiet', '--eval', "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  backend:
+    build:
+      context: ./backend
+      target: production
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      MONGO_URI: mongodb://${MONGO_USER}:${MONGO_PASSWORD}@mongodb:27017/${MONGO_DB_NAME}?authSource=admin
+      JWT_SECRET: ${JWT_SECRET_KEY}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-3600}
+      # Mesmo domínio do front: na prática o CORS nunca é exercitado, mas o valor fica
+      # certo para o caso de algum cliente externo (app, script) aparecer.
+      ALLOWED_ORIGINS: https://${DOMAIN}
+    expose:
+      - '3000'
+    depends_on:
+      mongodb:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ../houseworks-frontend
+      target: production
+      args:
+        # Embutido no bundle em tempo de BUILD. Trocar de domínio exige reconstruir esta
+        # imagem — não adianta mexer na variável de ambiente depois.
+        NEXT_PUBLIC_API_BASE_URL: https://${DOMAIN}
+    restart: unless-stopped
+    environment:
+      # Para o render no SERVIDOR, dentro da rede do compose.
+      API_INTERNAL_URL: http://backend:3000
+      NODE_ENV: production
+    expose:
+      - '3000'
+    depends_on:
+      - backend
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - '80:80'
+      - '443:443'
+    environment:
+      DOMAIN: ${DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Os certificados ficam AQUI. Sem este volume, todo restart pede um certificado novo
+      # e o Let's Encrypt começa a aplicar limite de requisições.
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - frontend
+      - backend
+
+volumes:
+  mongo-data:
+  caddy-data:
+  caddy-config:

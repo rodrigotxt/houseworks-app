@@ -22,7 +22,8 @@
 | [ARCHITECTURE.md](./ARCHITECTURE.md) | Mapa do código, convenções e receituário (como adicionar endpoint/campo/modelo) |
 | [DOMAIN.md](./DOMAIN.md) | Entidades, regras de negócio e invariantes que não podem ser violadas |
 | [DECISIONS.md](./DECISIONS.md) | Registro de decisões técnicas: o que foi decidido, o que foi descartado e por quê |
-| [OPERATIONS.md](./OPERATIONS.md) | Rodar, configurar, testar, implantar e resolver problemas |
+| [OPERATIONS.md](./OPERATIONS.md) | Rodar, configurar, testar e resolver problemas no dia a dia |
+| [DEPLOY.md](./DEPLOY.md) | Colocar no ar: domínio, TLS, docker-compose.prod.yml e o que fazer depois |
 | [FRONTEND.md](./FRONTEND.md) | Guia de integração para construir a UI |
 | **ROADMAP.md** (este) | Histórico das fases, critérios de aceite e o que foi resolvido |
 
