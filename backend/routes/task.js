@@ -12,11 +12,24 @@ const { loadTask } = require('../middlewares/task');
 const validate = require('../middlewares/validate');
 const asyncHandler = require('../utils/asyncHandler');
 const { updateTaskSchema } = require('../schemas/task');
+const { listTaskOccurrencesQuerySchema } = require('../schemas/occurrence');
+const occurrenceController = require('../controllers/occurrenceController');
 
 // @route   GET /tasks/:taskId
 // @desc    Detalhe da tarefa
 // @access  Membro da casa da tarefa
 router.get('/:taskId', requireAuth, loadTask, asyncHandler(taskController.getById));
+
+// @route   GET /tasks/:taskId/occurrences
+// @desc    Ocorrencias de uma tarefa
+// @access  Membro da casa da tarefa
+router.get(
+  '/:taskId/occurrences',
+  requireAuth,
+  loadTask,
+  validate({ query: listTaskOccurrencesQuerySchema }),
+  asyncHandler(occurrenceController.listByTask)
+);
 
 // @route   PATCH /tasks/:taskId
 // @desc    Atualizar tarefa

@@ -35,6 +35,15 @@ const HouseholdSchema = new mongoose.Schema(
       max: [720, 'A janela de avaliacao maxima e 720 horas.'],
     },
 
+    // Tolerancia, em horas, depois do fim do dia de vencimento antes de a ocorrencia
+    // virar "atrasada". 0 = vira atrasada assim que o dia termina.
+    overdueGraceHours: {
+      type: Number,
+      default: 0,
+      min: [0, 'A tolerancia nao pode ser negativa.'],
+      max: [168, 'A tolerancia maxima e 168 horas (7 dias).'],
+    },
+
     // Quantos dias de ocorrencias o gerador materializa a frente (Fase 2).
     horizonDays: {
       type: Number,

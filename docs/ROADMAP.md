@@ -33,9 +33,9 @@ Auditoria do estado atual em `main` (último commit `e2aa0dc`, 2025-06-24).
 | P11 | Contrato de auth quebrado | Backend assina `{ user: {...} }`; front tipa `{ id, email, ... }` e lê `user.email` | Dashboard renderiza `undefined`. |
 | P12 | Ambiguidade de repositório | `houseworks-app/frontend/` é submódulo vazio + clone solto em `houseworks-frontend/` | Duas fontes de verdade que vão divergir. |
 
-**Resolvidos até aqui (Fases 0 e 1):** P1, P2, P3, P4, P6, P7 e P10.
-**Pendentes:** P5 e P8 (Fase 2), P9 e P12 (Fase 5), P11 (parcial — o backend já expõe `/auth/me`; falta o
-front parar de decodificar o JWT por conta própria).
+**Resolvidos até aqui (Fases 0, 1 e 2):** P1, P2, P3, P4, P5, P6, P7, P8 e P10.
+**Pendentes:** P9 e P12 (Fase 5), P11 (parcial — o backend já expõe `/auth/me`; falta o front parar de
+decodificar o JWT por conta própria).
 
 ---
 
@@ -62,9 +62,12 @@ geradas a partir de uma regra, e não calculada on-the-fly a cada leitura.
 
 - **Por quê:** sem registro persistido não existe "atrasada", não existe histórico por ocorrência,
   não existe "quem fez no dia X" e não existe agregação de desempenho barata.
-- **Implementação:** RRULE (padrão iCalendar, via lib `rrule`) é a representação **interna**;
-  a API expõe o objeto `Recurrence` ergonômico (`frequency`, `interval`, `weekdays`, `dayOfMonth`, `startDate`, `endDate`).
-- **Geração:** job diário materializa `horizonDays` (default 30) à frente; leituras de agenda fazem backfill idempotente.
+- **Implementação:** a API expõe o objeto `Recurrence` ergonômico (`frequency`, `interval`, `weekdays`,
+  `dayOfMonth`, `startDate`, `endDate`) e as datas são expandidas por código próprio
+  (`services/recurrence.js`). **RRULE foi descartado durante a Fase 2:** o `BYMONTHDAY` do iCalendar
+  *pula* fevereiro numa regra "dia 31", e o contrato exige que caia no último dia do mês.
+- **Geração:** job diário (`node-cron`) materializa `horizonDays` (default 30) à frente; leituras de
+  agenda fazem backfill idempotente — **o job é otimização, não requisito de correção**.
 
 ### D3 — Gamificação no escopo da API (MVP) ✅ adotado
 
@@ -140,16 +143,29 @@ requisição sem token → `401`; token expirado → `401 TOKEN_EXPIRED`.
 
 ### Fase 2 — Motor de recorrência e agenda
 
-- [ ] Modelo `TaskOccurrence` + gerador idempotente (job diário + backfill on-read)
-- [ ] Conversão `Recurrence` → RRULE; `household.timezone` (default `America/Sao_Paulo`) em todo cálculo de dia
-- [ ] `GET /households/{id}/occurrences?from&to&status&assignedTo` (a tela "Cronograma")
-- [ ] Transição para `overdue` (grace period configurável) e `skipped`
-- [ ] Rotação/distribuição de responsável entre membros (opcional por tarefa)
-- [ ] Índice `TaskOccurrence{household,dueDate,status}`
+### Fase 2 — Motor de recorrência e agenda ✅
 
-**Aceite:** com *fake timers*, geração correta para `diaria`, `semanal` (multi-`weekdays`), `mensal`,
-`anual` e `ocasional`, cobrindo virada de mês, dia 31 em mês de 30, fevereiro e ano bissexto;
-reprocessar o job não duplica ocorrências (idempotência provada por teste).
+- [x] Modelo `TaskOccurrence` + gerador idempotente (job `node-cron` + backfill na leitura)
+- [x] `frequency` virou o objeto `recurrence` do contrato; `household.timezone` decide todo "dia" da casa
+- [x] `GET /households/{id}/occurrences`, `GET /tasks/{id}/occurrences`, `GET /occurrences/{id}` e `GET /me/occurrences`
+- [x] Transição para `overdue` com tolerância por casa (`overdueGraceHours`)
+- [x] Rodízio de responsável entre membros (`assignmentStrategy: rotate`)
+- [x] Índices `{task,dueDate}` (unique), `{household,dueDate,status}` e `{household,assignedTo,dueDate}`
+
+**Aceite:** geração correta para `diaria`, `semanal` (multi-`weekdays`), `mensal`, `anual` e `ocasional`,
+cobrindo virada de mês, dia 31 em mês de 30, fevereiro e ano bissexto; reprocessar o job não duplica
+ocorrências. Provado em `tests/recurrence.test.js` (bordas de calendário, sem banco) e
+`tests/occurrences.test.js` (agenda, atraso, rodízio, idempotência).
+
+**Três desvios conscientes do plano original:**
+
+1. **Sem RRULE.** O `BYMONTHDAY` do iCalendar *pula* fevereiro para uma regra "dia 31", enquanto o contrato
+   exige que caia no último dia do mês. A expansão é própria (`services/recurrence.js`), em matemática de
+   calendário pura — o que também a torna testável borda por borda, sem banco.
+2. **Relógio injetado em vez de *fake timers*.** O gerador recebe `now` por parâmetro, o que dá testes
+   determinísticos sem congelar o `Date` global (que atrapalha Mongoose e o Mongo em memória).
+3. **`skipped` existe como estado, mas ainda sem rota.** Concluir, pular e desfazer chegam na Fase 3
+   (`POST /occurrences/{id}/complete|skip|undo`).
 
 ### Fase 3 — Execução e avaliação (as regras do produto)
 

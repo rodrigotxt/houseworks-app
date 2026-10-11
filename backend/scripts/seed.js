@@ -1,5 +1,5 @@
 // scripts/seed.js
-// Popula uma familia de exemplo: usuarios, casa, memberships, tarefas e execucoes.
+// Popula uma familia de exemplo: usuarios, casa, memberships, tarefas e AGENDA.
 //
 // Nao existe base real a migrar — este script E o estado inicial do projeto.
 // Use "npm run seed" e "npm run seed:destroy".
@@ -11,12 +11,16 @@ const User = require('../models/User');
 const Household = require('../models/Household');
 const Membership = require('../models/Membership');
 const Task = require('../models/Task');
+const TaskOccurrence = require('../models/TaskOccurrence');
 const TaskExecutionHistory = require('../models/TaskExecutionHistory');
 const { generateInviteCode, inviteExpiry } = require('../utils/inviteCode');
+const { runDailyJob } = require('../services/occurrences');
+const { todayInZone } = require('../services/time');
 
 dotenv.config();
 
 const PASSWORD = 'a1b2c3d4'; // 8 caracteres: e o minimo aceito pelo contrato.
+const TIMEZONE = 'America/Sao_Paulo';
 
 const FAMILY = [
   { name: 'Rodrigo Martins', username: 'rodrigo', email: 'contato@rodrigo.inf.br', role: 'owner' },
@@ -26,13 +30,50 @@ const FAMILY = [
   { name: 'Luis C. Gabryel Martins', username: 'gabryel', email: 'gabryel@rodrigo.inf.br', role: 'child' },
 ];
 
-const TASKS = [
-  { name: 'Limpar banheiro', frequency: 'semanal', difficulty: 'dificil', assignedTo: 'isabella' },
-  { name: 'Lavar louca', frequency: 'diaria', difficulty: 'facil', assignedTo: 'arthur' },
-  { name: 'Tirar o lixo', frequency: 'diaria', difficulty: 'facil', assignedTo: null },
-  { name: 'Passar aspirador', frequency: 'semanal', difficulty: 'medio', assignedTo: 'gabryel' },
-  { name: 'Trocar roupa de cama', frequency: 'semanal', difficulty: 'medio', assignedTo: null },
-];
+// A recorrencia comeca hoje: a agenda olha para a frente, nao para tras.
+function tasksFor(today) {
+  return [
+    {
+      name: 'Limpar banheiro',
+      difficulty: 'dificil',
+      assignedTo: 'isabella',
+      recurrence: { frequency: 'semanal', weekdays: [6], startDate: today },
+    },
+    {
+      name: 'Lavar louca',
+      difficulty: 'facil',
+      assignedTo: 'arthur',
+      recurrence: { frequency: 'diaria', startDate: today },
+    },
+    {
+      name: 'Tirar o lixo',
+      difficulty: 'facil',
+      assignedTo: null,
+      recurrence: { frequency: 'diaria', startDate: today },
+    },
+    {
+      name: 'Passar aspirador',
+      difficulty: 'medio',
+      assignedTo: 'gabryel',
+      recurrence: { frequency: 'semanal', interval: 2, weekdays: [3, 6], startDate: today },
+    },
+    {
+      // Sem responsavel fixo: a cada ocorrencia o rodizio escolhe um membro.
+      name: 'Trocar roupa de cama',
+      difficulty: 'medio',
+      assignedTo: null,
+      assignmentStrategy: 'rotate',
+      recurrence: { frequency: 'semanal', weekdays: [0], startDate: today },
+    },
+    {
+      // Tarefa pontual: uma ocorrencia so.
+      name: 'Limpar a caixa de agua',
+      difficulty: 'muito_dificil',
+      assignedTo: null,
+      recurrence: { frequency: 'ocasional', startDate: today },
+    },
+  ];
+}
 
 async function connectDB() {
   await mongoose.connect(process.env.MONGO_URI);
@@ -45,6 +86,7 @@ async function clearAll() {
     Household.deleteMany(),
     Membership.deleteMany(),
     Task.deleteMany(),
+    TaskOccurrence.deleteMany(),
     TaskExecutionHistory.deleteMany(),
   ]);
 }
@@ -68,7 +110,7 @@ async function importData() {
 
   const household = await Household.create({
     name: 'Casa dos Martins',
-    timezone: 'America/Sao_Paulo',
+    timezone: TIMEZONE,
     ownerId: usersByUsername.rodrigo._id,
     inviteCode: generateInviteCode(),
     inviteCodeExpiresAt: inviteExpiry(),
@@ -82,41 +124,82 @@ async function importData() {
     });
   }
 
+  const today = todayInZone(TIMEZONE);
+
   const tasks = [];
-  for (const data of TASKS) {
+  for (const data of tasksFor(today)) {
     tasks.push(
       await Task.create({
         household: household._id,
         createdBy: usersByUsername.rodrigo._id,
         name: data.name,
-        frequency: data.frequency,
         difficulty: data.difficulty,
         assignedTo: data.assignedTo ? usersByUsername[data.assignedTo]._id : null,
+        assignmentStrategy: data.assignmentStrategy,
+        recurrence: data.recurrence,
       })
     );
   }
 
-  // Uma execucao ja conferida e outra aguardando avaliacao.
+  // Materializa a agenda (mesmo gerador que o job diario usa).
+  const summary = await runDailyJob();
+  console.log('Agenda gerada: ' + summary.created + ' ocorrencias.');
+
+  // Duas execucoes: uma ja conferida e outra aguardando avaliacao.
+  const banheiro = tasks.find((task) => task.name === 'Limpar banheiro');
+  const louca = tasks.find((task) => task.name === 'Lavar louca');
+
+  const ocorrenciaBanheiro = await TaskOccurrence.findOne({ task: banheiro._id }).sort({
+    dueDate: 1,
+  });
+
   await TaskExecutionHistory.create({
     household: household._id,
-    task: tasks[0]._id,
+    task: banheiro._id,
     executedBy: usersByUsername.isabella._id,
     note: 'Banheiro limpo e brilhando!',
     rating: 5,
     ratingNote: 'Ficou otimo, obrigada!',
   });
 
+  await TaskOccurrence.updateOne(
+    { _id: ocorrenciaBanheiro._id },
+    {
+      $set: {
+        status: 'done',
+        completedAt: new Date(),
+        completedBy: usersByUsername.isabella._id,
+      },
+    }
+  );
+
+  const ocorrenciaLouca = await TaskOccurrence.findOne({ task: louca._id }).sort({ dueDate: 1 });
+
   await TaskExecutionHistory.create({
     household: household._id,
-    task: tasks[1]._id,
+    task: louca._id,
     executedBy: usersByUsername.arthur._id,
     note: 'Louca lavada e guardada.',
   });
+
+  await TaskOccurrence.updateOne(
+    { _id: ocorrenciaLouca._id },
+    {
+      $set: {
+        status: 'done',
+        completedAt: new Date(),
+        completedBy: usersByUsername.arthur._id,
+      },
+    }
+  );
+
+  const pendentes = await TaskOccurrence.countDocuments({ status: 'pending' });
 
   console.log('');
   console.log('Casa:              ' + household.name);
   console.log('Codigo de convite: ' + household.inviteCode);
   console.log('Senha de todos:    ' + PASSWORD);
+  console.log('Ocorrencias pendentes na agenda: ' + pendentes);
   console.log('Usuarios:');
   FAMILY.forEach((member) => {
     console.log('  ' + member.role.padEnd(6) + member.username);

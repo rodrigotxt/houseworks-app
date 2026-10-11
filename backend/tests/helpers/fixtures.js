@@ -7,8 +7,17 @@
 // estado que a Fase 3 vai produzir pela API.
 
 const TaskExecutionHistory = require('../../models/TaskExecutionHistory');
+const TaskOccurrence = require('../../models/TaskOccurrence');
+const { todayInZone } = require('../../services/time');
 
 const { app, request, bearer } = require('./auth');
+
+function defaultRecurrence(overrides) {
+  return Object.assign(
+    { frequency: 'semanal', weekdays: [6], startDate: todayInZone('America/Sao_Paulo') },
+    overrides || {}
+  );
+}
 
 async function createTask(token, householdId, body) {
   const response = await request(app)
@@ -16,12 +25,20 @@ async function createTask(token, householdId, body) {
     .set(bearer(token))
     .send(
       Object.assign(
-        { name: 'Limpar banheiro', frequency: 'semanal', difficulty: 'dificil' },
+        { name: 'Limpar banheiro', difficulty: 'dificil', recurrence: defaultRecurrence() },
         body || {}
       )
     );
 
   return response;
+}
+
+// Ocorrencia gravada direto no modelo. Usada para montar estados que o gerador nao
+// produz sozinho — tipicamente uma ocorrencia vencida no passado.
+async function seedOccurrence(fields) {
+  return TaskOccurrence.create(
+    Object.assign({ status: 'pending', points: 1, dueDate: todayInZone('America/Sao_Paulo') }, fields)
+  );
 }
 
 async function seedExecution(fields) {
@@ -36,4 +53,4 @@ async function seedExecution(fields) {
   );
 }
 
-module.exports = { createTask, seedExecution };
+module.exports = { createTask, seedExecution, seedOccurrence, defaultRecurrence };

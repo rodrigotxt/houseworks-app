@@ -1,7 +1,7 @@
 // controllers/taskController.js
 // Tarefas da casa. As rotas aninhadas chegam com req.household (requireMember);
-// as rotas /tasks/:taskId chegam com req.task e req.membership (loadTask).
-// Nao ha mais checagem de posse por createdBy: a visibilidade e a CASA.
+// as rotas /tasks/:taskId chegam com req.task, req.membership e req.household (loadTask).
+// Nao ha checagem de posse por createdBy: a visibilidade e a CASA.
 
 const Task = require('../models/Task');
 const Membership = require('../models/Membership');
@@ -11,11 +11,12 @@ const ErrorCode = require('../utils/errorCodes');
 const { ok, created, noContent, pageMeta } = require('../utils/respond');
 const { pointsForDifficulty } = require('../utils/points');
 const { buildSort, skipFor, escapeRegex } = require('../utils/pagination');
+const { refreshHousehold, resetFutureOccurrences } = require('../services/occurrences');
 
 const TASK_SORT_FIELDS = ['name', 'createdAt', 'updatedAt', 'points', 'difficulty'];
 
-// O responsavel precisa ser membro da casa: sem isso a tarefa ficaria
-// designada a alguem que nem enxerga a casa.
+// O responsavel precisa ser membro da casa: sem isso a tarefa ficaria designada a
+// alguem que nem enxerga a casa.
 async function assertMemberOfHousehold(householdId, userId) {
   const membership = await Membership.findOne({ household: householdId, user: userId });
 
@@ -26,27 +27,46 @@ async function assertMemberOfHousehold(householdId, userId) {
   }
 }
 
+// Rodizio e responsavel fixo se excluem: o gerador so pode escolher um dos dois.
+function assertAssignmentConsistency(strategy, assignedTo) {
+  if (strategy === 'rotate' && assignedTo) {
+    throw ApiError.badRequest('Um ou mais campos sao invalidos.', [
+      {
+        field: 'assignedTo',
+        issue: 'Com atribuicao em rodizio (rotate), envie assignedTo como null.',
+      },
+    ]);
+  }
+}
+
 // @desc    Criar tarefa na casa
 // @route   POST /api/v1/households/:householdId/tasks
 // @access  Capability canManageTasks (owner ou adult)
 exports.create = async (req, res) => {
-  const { name, description, frequency, difficulty, points, assignedTo } = req.body;
+  const { name, description, recurrence, difficulty, points, assignedTo, assignmentStrategy } =
+    req.body;
 
   if (assignedTo) {
     await assertMemberOfHousehold(req.household._id, assignedTo);
   }
 
+  assertAssignmentConsistency(assignmentStrategy, assignedTo);
+
   const task = await new Task({
     household: req.household._id,
     name,
     description,
-    frequency,
+    recurrence,
     difficulty,
     // Sem pontos informados, o pre-validate do modelo deriva da dificuldade.
     points,
     assignedTo: assignedTo || null,
+    assignmentStrategy,
     createdBy: req.userId,
   }).save();
+
+  // Materializa as ocorrencias ja na criacao: a agenda responde sem depender do job.
+  await refreshHousehold(req.household);
 
   return created(res, task);
 };
@@ -54,7 +74,7 @@ exports.create = async (req, res) => {
 // @desc    Listar as tarefas da casa
 // @route   GET /api/v1/households/:householdId/tasks
 // @access  Membro da casa
-// Este e o endpoint que corrige o P1: a visibilidade e a casa, nao quem criou.
+// A visibilidade e a casa, nao quem criou — e o que corrige o P1 do roadmap.
 exports.list = async (req, res) => {
   const { status, assignedTo, frequency, difficulty, q, sort, page, pageSize } =
     req.validatedQuery;
@@ -67,7 +87,8 @@ exports.list = async (req, res) => {
     filter.assignedTo = assignedTo;
   }
 
-  if (frequency) filter.frequency = frequency;
+  // A frequencia agora mora dentro da recorrencia; o nome do parametro segue o contrato.
+  if (frequency) filter['recurrence.frequency'] = frequency;
   if (difficulty) filter.difficulty = difficulty;
   if (q) filter.name = { $regex: escapeRegex(q), $options: 'i' };
 
@@ -93,15 +114,26 @@ exports.getById = async (req, res) => {
 // @access  Capability canManageTasks (owner ou adult)
 exports.update = async (req, res) => {
   const task = req.task;
-  const { name, description, frequency, difficulty, points, assignedTo, status } = req.body;
+  const { name, description, recurrence, difficulty, points, assignedTo, assignmentStrategy, status } =
+    req.body;
 
   if (assignedTo) {
     await assertMemberOfHousehold(task.household, assignedTo);
   }
 
+  const nextStrategy =
+    assignmentStrategy !== undefined ? assignmentStrategy : task.assignmentStrategy;
+  const nextAssignedTo =
+    assignedTo !== undefined ? assignedTo : task.assignedTo ? String(task.assignedTo) : null;
+
+  assertAssignmentConsistency(nextStrategy, nextAssignedTo);
+
   if (name !== undefined) task.name = name;
   if (description !== undefined) task.description = description;
-  if (frequency !== undefined) task.frequency = frequency;
+
+  if (recurrence !== undefined) {
+    task.recurrence = recurrence;
+  }
 
   if (difficulty !== undefined) {
     task.difficulty = difficulty;
@@ -113,6 +145,7 @@ exports.update = async (req, res) => {
   }
 
   if (points !== undefined) task.points = points;
+  if (assignmentStrategy !== undefined) task.assignmentStrategy = assignmentStrategy;
   if (assignedTo !== undefined) task.assignedTo = assignedTo || null;
 
   if (status !== undefined) {
@@ -121,6 +154,13 @@ exports.update = async (req, res) => {
   }
 
   await task.save();
+
+  // Mudar a recorrencia NAO reescreve o passado: apaga so o que esta pendente de hoje
+  // em diante e regenera com a regra nova.
+  if (recurrence !== undefined) {
+    await resetFutureOccurrences(task, { timezone: req.household.timezone });
+    await refreshHousehold(req.household);
+  }
 
   return ok(res, task);
 };
@@ -141,6 +181,7 @@ exports.remove = async (req, res) => {
     }
 
     await TaskExecutionHistory.deleteMany({ task: task._id });
+    await require('../models/TaskOccurrence').deleteMany({ task: task._id });
     await Task.deleteOne({ _id: task._id });
 
     return noContent(res);
@@ -150,6 +191,9 @@ exports.remove = async (req, res) => {
   if (task.status !== 'archived') {
     task.status = 'archived';
     task.archivedAt = new Date();
+
+    // A agenda para de gerar, mas as ocorrencias pendentes ja materializadas ficam:
+    // apaga-las esconderia tarefas que alguem ainda pode cumprir.
     await task.save();
   }
 

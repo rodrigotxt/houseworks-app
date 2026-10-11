@@ -1739,7 +1739,7 @@ components:
 
     Household:
       type: object
-      required: [id, name, timezone, ownerId, ratingWindowHours, horizonDays, createdAt]
+      required: [id, name, timezone, ownerId, ratingWindowHours, overdueGraceHours, horizonDays, createdAt]
       properties:
         id:
           type: string
@@ -1763,6 +1763,15 @@ components:
           default: 72
           minimum: 1
           example: 72
+        overdueGraceHours:
+          type: integer
+          description: |
+            Tolerância, em horas, depois do fim do dia de vencimento antes de a ocorrência
+            virar `overdue`. Com 0, ela vira atrasada assim que o dia termina no fuso da casa.
+          default: 0
+          minimum: 0
+          maximum: 168
+          example: 0
         horizonDays:
           type: integer
           description: Quantos dias de ocorrências o gerador materializa à frente.
@@ -1873,7 +1882,7 @@ components:
     Task:
       type: object
       description: Dever recorrente da casa.
-      required: [id, householdId, name, recurrence, difficulty, points, status, createdBy, createdAt, updatedAt]
+      required: [id, householdId, name, recurrence, difficulty, points, assignmentStrategy, status, createdBy, createdAt, updatedAt]
       properties:
         id:
           type: string
@@ -1908,6 +1917,13 @@ components:
           oneOf:
             - $ref: '#/components/schemas/UserRef'
             - type: 'null'
+        assignmentStrategy:
+          type: string
+          enum: [fixed, rotate]
+          default: fixed
+          description: |
+            `fixed` usa `assignedTo`. `rotate` distribui as ocorrências em rodízio entre os
+            membros da casa, na ordem de entrada — e por isso exige `assignedTo` nulo.
         status:
           type: string
           enum: [active, archived]
@@ -2318,6 +2334,11 @@ components:
           minimum: 1
           maximum: 720
           default: 72
+        overdueGraceHours:
+          type: integer
+          minimum: 0
+          maximum: 168
+          default: 0
         horizonDays:
           type: integer
           minimum: 1
@@ -2338,6 +2359,10 @@ components:
           type: integer
           minimum: 1
           maximum: 720
+        overdueGraceHours:
+          type: integer
+          minimum: 0
+          maximum: 168
         horizonDays:
           type: integer
           minimum: 1
@@ -2402,6 +2427,12 @@ components:
           type: string
           description: ID do membro responsável. Omitido ou `null` = qualquer um pode assumir.
           example: 66f1a2b3c4d5e6f7a8b9c0d4
+        assignmentStrategy:
+          type: string
+          enum: [fixed, rotate]
+          default: fixed
+          description: |
+            Com `rotate`, `assignedTo` precisa ser nulo — o rodízio escolhe a cada ocorrência.
 
     UpdateTaskRequest:
       type: object
@@ -2430,6 +2461,9 @@ components:
           oneOf:
             - type: string
             - type: 'null'
+        assignmentStrategy:
+          type: string
+          enum: [fixed, rotate]
         status:
           type: string
           enum: [active, archived]

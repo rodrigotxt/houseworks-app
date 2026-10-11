@@ -4,6 +4,7 @@
 const app = require('./app');
 const config = require('./config');
 const connectDB = require('./config/db');
+const { startScheduler } = require('./jobs/scheduler');
 const mongoose = require('mongoose');
 
 const port = config.port;
@@ -16,6 +17,10 @@ async function start() {
     console.log('Ambiente: ' + process.env.NODE_ENV);
     console.log('Contrato: /api/v1 (alias de compatibilidade: /api)');
   });
+
+  // O agendador vive no processo do servidor, nao no app: os testes montam o app
+  // sem subir cron nenhum.
+  startScheduler();
 
   const shutdown = (signal) => {
     console.log(signal + ' recebido, encerrando...');

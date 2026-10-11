@@ -4,8 +4,12 @@
 // As rotas /tasks/:taskId nao recebem householdId, entao o escopo vem do proprio
 // recurso. Quando o usuario nao e membro da casa da tarefa respondemos 404, e nao
 // 403: assim nao vazamos a existencia de recursos de outras casas.
+//
+// A casa tambem vem carregada porque o gerador de ocorrencias precisa do fuso e do
+// horizonte dela.
 
 const Task = require('../models/Task');
+const Household = require('../models/Household');
 const Membership = require('../models/Membership');
 const ApiError = require('../utils/apiError');
 const ErrorCode = require('../utils/errorCodes');
@@ -29,6 +33,7 @@ async function loadTask(req, res, next) {
 
   req.task = task;
   req.membership = membership;
+  req.household = await Household.findById(task.household);
 
   return next();
 }

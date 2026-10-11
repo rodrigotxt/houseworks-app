@@ -12,7 +12,9 @@ const { ok } = require('../utils/respond');
 const authRoutes = require('./auth');
 const householdRoutes = require('./household');
 const taskRoutes = require('./task');
+const occurrenceRoutes = require('./occurrence');
 const executionRoutes = require('./execution');
+const meRoutes = require('./me');
 
 // GET /health — smoke test de integracao e healthcheck do container. Nao exige autenticacao.
 router.get('/health', (req, res) => {
@@ -43,6 +45,8 @@ router.use('/auth', authRoutes);
 router.use('/households', householdRoutes);
 
 router.use('/tasks', taskRoutes);
+router.use('/occurrences', occurrenceRoutes);
 router.use('/executions', executionRoutes);
+router.use('/me', meRoutes);
 
 module.exports = router;
