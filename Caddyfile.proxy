@@ -1,0 +1,35 @@
+# Caddyfile.proxy — para quando JÁ existe um proxy na frente (Nginx Proxy Manager, Traefik...).
+#
+# A diferença para o Caddyfile normal é uma linha: `auto_https off`. Aqui o Caddy NÃO fala com o
+# Let's Encrypt — quem termina o TLS é o proxy da frente, e este Caddy só roteia em HTTP dentro da
+# rede do Docker. Sem isso os dois pediriam certificado para o mesmo domínio e o desafio ACME
+# falharia, porque a porta 80 já pertence ao outro proxy.
+#
+# O proxy da frente alcança este Caddy pelo nome de rede `houseworks-proxy`, na porta 80.
+
+{
+	auto_https off
+}
+
+:80 {
+	encode gzip
+
+	# `handle` e não `handle_path`: o prefixo /api é PRESERVADO, porque o backend serve as rotas
+	# em /api/v1/... Se fosse handle_path o prefixo seria removido e a API daria 404 em tudo.
+	handle /api/* {
+		reverse_proxy backend:3000
+	}
+
+	# Todo o resto é o Next.js.
+	handle {
+		reverse_proxy frontend:3000
+	}
+
+	# HSTS NÃO entra aqui de propósito: quem responde em HTTPS é o proxy da frente, então é ele
+	# que deve anunciar o cabeçalho. Anunciá-lo de dentro do HTTP seria mentira.
+	header {
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+}

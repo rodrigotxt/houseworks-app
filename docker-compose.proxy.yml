@@ -1,0 +1,103 @@
+# docker-compose.proxy.yml — para uma VPS que JÁ tem um proxy ocupando as portas 80 e 443.
+#
+#   docker compose -f docker-compose.proxy.yml --env-file .env.prod up -d --build
+#
+# É o caso do Nginx Proxy Manager (ou Traefik): o proxy da frente termina o TLS e encaminha para o
+# Caddy desta stack, que continua sendo quem separa /api do resto. Só o proxy da frente publica
+# porta — aqui nada é publicado no host.
+#
+# Diferenças em relação ao docker-compose.prod.yml, e por quê:
+#
+#   • O Caddy não publica 80/443, porque as duas já pertencem ao outro proxy. Se tentasse, o
+#     `up` falharia com "address already in use".
+#   • O Caddy usa o Caddyfile.proxy (`auto_https off`), para não disputar o Let's Encrypt com o
+#     proxy da frente.
+#   • Entra a rede externa do proxy, e o Caddy ganha o apelido fixo `houseworks-proxy`. O apelido
+#     importa: o Komodo roda `docker compose -p <nome-da-stack>`, então o nome real do container
+#     depende do nome que você deu à Stack. Com o apelido, a configuração no proxy da frente é
+#     sempre `houseworks-proxy:80`, não importa como a Stack se chame.
+
+# Atenção: sob o Komodo este `name` é ignorado — ele passa `-p <nome-da-stack>`, que vence.
+name: houseworks-prod
+
+services:
+  mongodb:
+    image: mongo:8.2
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD}
+    volumes:
+      - mongo-data:/data/db
+    # Sem "ports": o banco só é alcançável pela rede interna do compose.
+    healthcheck:
+      test: ['CMD', 'mongosh', '--quiet', '--eval', "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  backend:
+    build:
+      context: ./backend
+      target: production
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      MONGO_URI: mongodb://${MONGO_USER}:${MONGO_PASSWORD}@mongodb:27017/${MONGO_DB_NAME}?authSource=admin
+      JWT_SECRET: ${JWT_SECRET_KEY}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-3600}
+      ALLOWED_ORIGINS: https://${DOMAIN}
+    expose:
+      - '3000'
+    depends_on:
+      mongodb:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+      target: production
+      args:
+        # Embutido no bundle em tempo de BUILD. Trocar de domínio exige reconstruir esta imagem —
+        # não adianta mexer na variável de ambiente depois.
+        NEXT_PUBLIC_API_BASE_URL: https://${DOMAIN}
+    restart: unless-stopped
+    environment:
+      # Para o render no SERVIDOR, dentro da rede do compose.
+      API_INTERNAL_URL: http://backend:3000
+      NODE_ENV: production
+    expose:
+      - '3000'
+    depends_on:
+      - backend
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    # Sem "ports": quem publica 80/443 é o proxy da frente.
+    networks:
+      default: {}
+      proxy:
+        # Nome estável para o proxy da frente apontar, independente do nome da Stack.
+        aliases:
+          - houseworks-proxy
+    volumes:
+      - ./Caddyfile.proxy:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - frontend
+      - backend
+
+networks:
+  # A rede onde o proxy da frente já vive. Ajuste PROXY_NETWORK no ambiente se tiver outro nome.
+  proxy:
+    external: true
+    name: ${PROXY_NETWORK:-proxy-network}
+
+volumes:
+  mongo-data:
+  caddy-data:
+  caddy-config:

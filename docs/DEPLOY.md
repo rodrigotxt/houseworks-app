@@ -170,7 +170,7 @@ executa.
 |---|---|---|
 | `server` | a sua VPS | onde os containers rodam |
 | `repo` / `branch` | `rodrigotxt/houseworks-app` / `main` | o Komodo clona e dá `git pull` |
-| `file_paths` | `docker-compose.prod.yml` | o padrão do Komodo é `compose.yaml`, que não existe aqui |
+| `file_paths` | `docker-compose.prod.yml` — ou `docker-compose.proxy.yml` se as portas 80/443 já forem de outro proxy (§ 8) | o padrão do Komodo é `compose.yaml`, que não existe aqui |
 | `run_build` | `true` | o compose usa `build:`; sem isto o deploy não reconstrói as imagens |
 | `environment` | o conteúdo do `.env.prod` | ele escreve o arquivo e passa por `--env-file` |
 | `webhook_enabled` | `true` | um push em `main` dispara o redeploy |
@@ -201,7 +201,53 @@ dois; ver **D22** em [DECISIONS.md](./DECISIONS.md).
 
 ---
 
-## 8. Alternativa: serviços gerenciados
+## 8. Quando as portas 80 e 443 já são de outro proxy
+
+Este é o caso comum numa VPS que já hospeda outras coisas: um Nginx Proxy Manager (ou Traefik) já
+ocupa 80 e 443, e o Caddy do § 3 não chega nem a subir — o `up` falha com `address already in use`.
+
+O `docker-compose.proxy.yml` resolve isso sem abrir mão do roteamento versionado. A ideia: o proxy
+que já existe continua terminando o TLS, e o Caddy desta stack vira um roteador interno, sem
+publicar porta nenhuma.
+
+```bash
+docker compose -f docker-compose.proxy.yml --env-file .env.prod up -d --build
+```
+
+O que muda em relação ao § 3:
+
+| | § 3 | § 8 |
+|---|---|---|
+| Quem publica 80/443 | o Caddy desta stack | o proxy que já existe |
+| Quem fala com o Let's Encrypt | o Caddy | o proxy que já existe |
+| Caddyfile | `Caddyfile` | `Caddyfile.proxy` (`auto_https off`) |
+
+O Caddy entra na rede do proxy (por padrão `proxy-network`, ajustável por `PROXY_NETWORK`) com o
+apelido fixo **`houseworks-proxy`**. O apelido tem motivo prático: o Komodo roda
+`docker compose -p <nome-da-stack>`, então o nome real do container depende do nome que você deu à
+Stack. Com o apelido, a configuração no proxy da frente é sempre a mesma.
+
+No Nginx Proxy Manager, crie um **Proxy Host**:
+
+| Campo | Valor |
+|---|---|
+| Domain Names | `tasks.seudominio.com` |
+| Scheme | `http` |
+| Forward Hostname | `houseworks-proxy` |
+| Forward Port | `80` |
+| Websockets Support | ligado |
+| SSL | pedir certificado novo + Force SSL |
+
+**Por que manter o Caddy, em vez de apontar o proxy direto para cada serviço.** Porque as duas
+rotas (`/api/*` para a API, o resto para o Next) ficam no `Caddyfile.proxy`, versionadas no git e
+testadas, em vez de morarem no banco do NPM. É a mesma razão de o contrato viver no repositório.
+
+> **O DNS continua obrigatório.** O registro `A` do domínio precisa apontar para a VPS antes de
+> pedir o certificado, senão o desafio do Let's Encrypt falha.
+
+---
+
+## 9. Alternativa: serviços gerenciados
 
 Se preferir não administrar servidor, dá para montar com peças gerenciadas — **desde que o
 domínio continue sendo um só** (§ 1):
@@ -225,7 +271,7 @@ requisição depois disso demora alguns segundos.
 
 ---
 
-## 9. Custo realista
+## 10. Custo realista
 
 | Caminho | Custo mensal | Manutenção |
 |---|---|---|
@@ -242,7 +288,7 @@ máquina que você já paga.
 
 ---
 
-## 10. O que está pronto e o que não está
+## 11. O que está pronto e o que não está
 
 **Pronto e verificado em produção:** TLS automático, cookie seguro, sessão revogável, limite de
 tentativas no login, cabeçalhos de segurança, banco sem porta pública, healthcheck do Mongo.
