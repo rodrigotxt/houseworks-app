@@ -63,7 +63,8 @@ const TaskSchema = new mongoose.Schema({
   }
 
 }, {
-  timestamps: true // Adiciona automaticamente os campos `createdAt` e `updatedAt`
+  timestamps: true, // Adiciona automaticamente os campos `createdAt` e `updatedAt`
+  toJSON: require('../config/serialization'), // expoe "id", omite "_id"/"__v"
 });
 
 // Cria o modelo 'Task' a partir do esquema

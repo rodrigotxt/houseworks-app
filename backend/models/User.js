@@ -29,7 +29,8 @@ const UserSchema = new mongoose.Schema({
     default: Date.now,
   }
 }, {
-  timestamps: true // Adiciona automaticamente `createdAt` e `updatedAt`
+  timestamps: true, // Adiciona automaticamente `createdAt` e `updatedAt`
+  toJSON: require('../config/serialization'), // expoe "id", omite "_id"/"__v"
 });
 
 // Método estático para buscar usuário por email ou username

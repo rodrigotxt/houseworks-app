@@ -1604,6 +1604,7 @@ components:
         - MEMBER_NOT_FOUND
         - DUPLICATE_MEMBER
         - LAST_OWNER_CANNOT_LEAVE
+        - ROUTE_NOT_FOUND
         - TASK_NOT_FOUND
         - TASK_ARCHIVED
         - OCCURRENCE_NOT_FOUND

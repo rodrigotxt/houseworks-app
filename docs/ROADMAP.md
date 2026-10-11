@@ -79,15 +79,26 @@ Pontos e ranking são contrato da v1 (`/stats`, `/leaderboard`, `/me/score`), n�
 ### Fase 0 — Contrato e envelope  ·  *fundação do contrato*
 
 - [x] `docs/openapi.yaml` (OpenAPI 3.1) como fonte de verdade
-- [ ] Prefixo de versão `/api/v1` (rotas atuais em `/api` viram alias temporário)
-- [ ] Envelope único: sucesso `{ data, meta }` · erro `{ error: { code, message, details, requestId } }`
-- [ ] `errorHandler` central + handler de 404 + `requestId` (`X-Request-Id`) em toda resposta
-- [ ] Catálogo de `ErrorCode` estável (o front traduz por código, nunca por texto)
+- [x] Prefixo de versão `/api/v1`, com `/api` mantido como alias de compatibilidade
+- [x] Envelope único: sucesso `{ data, meta }` · erro `{ error: { code, message, details, requestId } }`
+- [x] `errorHandler` central + handler de 404 + `requestId` (`X-Request-Id`) em toda resposta
+- [x] Catálogo de `ErrorCode` estável (o front traduz por código, nunca por texto)
 - [x] `redocly.yaml` — lint do contrato configurado (spec valida com 0 warnings)
+- [x] Validação de entrada com **zod** e allow-list estrita (fecha o mass-assignment)
+- [x] Harness de teste: jest + supertest + `mongodb-memory-server`
 - [ ] Lint do spec no CI, docs publicadas em `/docs`
 
 **Aceite:** nenhum endpoint devolve texto solto; todo erro tem `code` do catálogo e `requestId`;
 o spec valida no CI e cobre 100% das rotas implementadas.
+
+**Status:** implementado, com 36 testes em 4 suítes (`backend/tests/`). O harness sobe um Mongo em
+memória por arquivo — `app.js` não conecta sozinho; quem conecta é `server.js`.
+
+**Aderência parcial ao contrato — esperado nesta fase.** A Fase 0 alinha o *envelope*, o *catálogo de
+erros* e a *validação*. Os **formatos dos recursos** ainda são os do modelo antigo e convergem nas fases
+seguintes: `Task.frequency` ainda é string (o contrato pede o objeto `recurrence` — Fase 2), a posse ainda
+é por `createdBy` e não por `Household` (Fase 1), e `TaskExecutionHistory` ainda não tem `ratedBy`
+(Fase 3). Já alinhado: `id` em vez de `_id`, sem `__v` e sem `password` na resposta.
 
 ### Fase 1 — Fundação do domínio  ·  *primeiro commit de negócio*
 
@@ -143,13 +154,15 @@ reprocessar o job não duplica ocorrências (idempotência provada por teste).
 
 ### Fase 5 — Endurecimento
 
-- [ ] Validação de entrada com schema (zod), eliminando mass-assignment (`PUT` hoje aceita `status` do body)
+- [x] ~~Validação de entrada com schema (zod), eliminando mass-assignment~~ — **antecipado para a Fase 0**
 - [ ] `helmet`, `express-rate-limit` no login, CORS por ambiente (`allowedOrigins` deixa de ser hardcoded)
 - [ ] Paginação/filtros/ordenação em todas as listagens (hoje `getAllTasks` devolve tudo)
 - [ ] **Rotacionar `JWT_SECRET`** e remover segredos do Git (`.env` → `.env.example` + secret no deploy)
 - [ ] Refresh de token / expiração consistente (backend `1h` vs front `JWT_EXPIRES_IN=3h`)
 - [ ] Remover código morto: `config/` na raiz, `routes/other.js`, `app/api/test-env.ts`
-- [ ] Suíte de testes (supertest + `mongodb-memory-server`) + CI (lint + test + lint do spec)
+- [ ] CI (lint + test + lint do spec) — a suíte de testes já existe desde a Fase 0
+- [ ] Dockerfile em multi-stage com `npm ci --omit=dev` na imagem final: hoje o `npm install` do
+  container instala também jest/supertest/mongodb-memory-server, que só servem ao desenvolvimento
 - [ ] Seed reescrito para o modelo novo e reutilizado como fixture de teste
 
 **Aceite:** CI verde; nenhum segredo no histórico novo; `npm test` cobre autorização, recorrência e pontuação.

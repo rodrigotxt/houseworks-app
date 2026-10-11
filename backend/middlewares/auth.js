@@ -1,29 +1,48 @@
 // middlewares/auth.js
+// Aceita o token por Authorization: Bearer (clientes nao-browser) ou pelo header
+// legado x-auth-token. O cookie httpOnly jwt_token entra na Fase 1 (ROADMAP C4).
+// Erros saem pelo catalogo: UNAUTHENTICATED, TOKEN_EXPIRED ou TOKEN_INVALID.
+
 const jwt = require('jsonwebtoken');
-const config = require('../config'); // Importa o jwtSecret do seu arquivo de configuração
+const config = require('../config');
+const ApiError = require('../utils/apiError');
+const ErrorCode = require('../utils/errorCodes');
 
-// Middleware para proteger rotas
-module.exports = function (req, res, next) {
-  // Obter o token do cabeçalho
-  const token = req.header('x-auth-token');
-
-  // Verificar se não há token
-  if (!token) {
-    return res.status(401).json({ message: 'Nenhum token, autorização negada.' });
+function extractToken(req) {
+  const authorization = req.get('Authorization');
+  if (authorization && authorization.startsWith('Bearer ')) {
+    return authorization.slice(7).trim();
   }
 
-  // Verificar o token
+  const legacy = req.get('x-auth-token');
+  if (legacy) {
+    return legacy.startsWith('Bearer ') ? legacy.slice(7).trim() : legacy.trim();
+  }
+
+  return null;
+}
+
+module.exports = function auth(req, res, next) {
+  const token = extractToken(req);
+
+  if (!token) {
+    return next(ApiError.unauthenticated('Autenticacao necessaria.', ErrorCode.UNAUTHENTICATED));
+  }
+
   try {
-    // Verifica se o token começa com "Bearer " e o remove, se for o caso
-    const tokenWithoutBearer = token.startsWith('Bearer ') ? token.slice(7, token.length) : token;
-
-    // Decodifica o token usando o segredo JWT
-    const decoded = jwt.verify(tokenWithoutBearer, config.jwtSecret);
-
-    // Anexar o objeto de usuário (com id e email) à requisição
+    const decoded = jwt.verify(token, config.jwtSecret);
     req.user = decoded.user;
-    next(); // Continua para a próxima função middleware/rota
+    return next();
   } catch (err) {
-    res.status(401).json({ message: 'Token não é válido.' });
+    if (err.name === 'TokenExpiredError') {
+      return next(
+        ApiError.unauthenticated(
+          'Sessao expirada. Faca login novamente.',
+          ErrorCode.TOKEN_EXPIRED
+        )
+      );
+    }
+
+    return next(ApiError.unauthenticated('Token invalido.', ErrorCode.TOKEN_INVALID));
   }
 };

@@ -1,104 +1,81 @@
 // controllers/authController.js
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
-const User = require('../models/User'); // Importa o modelo User
-const config = require('../config'); // Importa configurações (para jwtSecret)
+// Sem try/catch: erros lancados viram o envelope no errorHandler central.
+// Sem res.json cru: toda resposta de sucesso passa pelos helpers de utils/respond.
 
-// Lógica para registrar um novo usuário
+const jwt = require('jsonwebtoken');
+const User = require('../models/User');
+const config = require('../config');
+const ApiError = require('../utils/apiError');
+const ErrorCode = require('../utils/errorCodes');
+const { created, ok } = require('../utils/respond');
+
+// 1h. Precisa bater com o expiresIn anunciado no contrato e com o front (ROADMAP C1).
+const TOKEN_TTL_SECONDS = 3600;
+
+// Nunca serializar o hash da senha. Projecao explicita, nao delete de campo.
+function publicUser(user) {
+  return {
+    id: user.id,
+    name: user.name,
+    username: user.username,
+    email: user.email,
+    createdAt: user.createdAt,
+    updatedAt: user.updatedAt,
+  };
+}
+
+// @desc    Registrar usuario
+// @route   POST /api/v1/auth/register
+// @access  Publico
 exports.registerUser = async (req, res) => {
   const { name, username, email, password } = req.body;
 
-  // As validações básicas de `required` já estão no schema Mongoose
-  // Aqui você pode adicionar validações de negócio mais complexas, se houver
-
-  try {
-    // 1. Verificar se o usuário já existe por email ou username
-    let userExists = await User.findByEmailOrUsername(email); // Pode usar email para esta verificação inicial
-    if (userExists) {
-        // Se o usuário existir, verifique qual campo já existe
-        if (userExists.email === email && userExists.username === username) {
-            return res.status(400).json({ message: 'Email e nome de usuário já registrados.' });
-        } else if (userExists.email === email) {
-            return res.status(400).json({ message: 'Email já registrado.' });
-        } else if (userExists.username === username) {
-            return res.status(400).json({ message: 'Nome de usuário já registrado.' });
-        }
-    }
-
-
-    // 2. Criar e salvar o novo usuário (a senha será criptografada automaticamente pelo middleware 'pre-save')
-    const newUser = new User({
-      name,
-      username,
-      email,
-      password, // A senha será criptografada pelo middleware 'pre-save' no modelo
-    });
-
-    await newUser.save();
-
-    res.status(201).json({ message: 'Usuário registrado com sucesso!', userId: newUser._id });
-
-  } catch (error) {
-    // Erros de validação do Mongoose (ex: unique, required)
-    if (error.code === 11000) { // Erro de duplicidade (unique)
-      return res.status(400).json({ message: 'Dados duplicados. Email ou nome de usuário já em uso.' });
-    }
-    // Erros de validação do schema (se não usar unique para todos os campos)
-    if (error.name === 'ValidationError') {
-        const messages = Object.values(error.errors).map(val => val.message);
-        return res.status(400).json({ message: messages.join(', ') });
-    }
-
-    console.error('Erro ao registrar usuário:', error);
-    res.status(500).send('Erro interno do servidor ao registrar usuário.');
+  const emailTaken = await User.findOne({ email });
+  if (emailTaken) {
+    throw ApiError.conflict('Este email ja esta registrado.', ErrorCode.EMAIL_ALREADY_REGISTERED);
   }
+
+  const usernameTaken = await User.findOne({ username });
+  if (usernameTaken) {
+    throw ApiError.conflict(
+      'Este nome de usuario ja esta registrado.',
+      ErrorCode.USERNAME_ALREADY_REGISTERED
+    );
+  }
+
+  // A senha e criptografada pelo pre-save do modelo.
+  const user = await new User({ name, username, email, password }).save();
+
+  return created(res, { user: publicUser(user) });
 };
 
-// Lógica para autenticar o usuário e gerar JWT
+// @desc    Autenticar e emitir JWT
+// @route   POST /api/v1/auth/login
+// @access  Publico
 exports.loginUser = async (req, res) => {
   const { username, email, password } = req.body;
-  
-  let identifier = username || email;
+  const identifier = username || email;
 
-  // Validação simples de entrada
-  if (!identifier || !password) {
-    return res.status(400).json({ message: 'Por favor, forneça identificador (email/username) e senha.' });
+  const user = await User.findByEmailOrUsername(identifier);
+
+  // Mesma resposta para usuario inexistente e senha errada: nao revela qual falhou.
+  if (!user) {
+    throw ApiError.unauthenticated('Credenciais invalidas.', ErrorCode.INVALID_CREDENTIALS);
   }
 
-  try {
-    // 1. Buscar o usuário por email ou username usando o método estático
-    const user = await User.findByEmailOrUsername(identifier);
-    if (!user) {
-      return res.status(400).json({ message: 'Credenciais inválidas.' }); // Não revela se é usuário ou senha errada
-    }
-
-    // 2. Comparar a senha fornecida com a senha criptografada usando o método de instância
-    const isMatch = await user.matchPassword(password);
-    if (!isMatch) {
-      return res.status(400).json({ message: 'Credenciais inválidas.' });
-    }
-
-    // 3. Gerar o token JWT
-    const payload = {
-      user: {
-        id: user.id,
-        email: user.email,
-        username: user.username // Incluir username no payload
-      },
-    };
-
-    jwt.sign(
-      payload,
-      config.jwtSecret,
-      { expiresIn: '1h' },
-      (err, token) => {
-        if (err) throw err;
-        res.json({ token, user: payload.user });
-      }
-    );
-
-  } catch (error) {
-    console.error('Erro ao fazer login:', error);
-    res.status(500).send('Erro interno do servidor ao fazer login.');
+  const passwordMatches = await user.matchPassword(password);
+  if (!passwordMatches) {
+    throw ApiError.unauthenticated('Credenciais invalidas.', ErrorCode.INVALID_CREDENTIALS);
   }
+
+  const token = jwt.sign(
+    { user: { id: user.id, email: user.email, username: user.username } },
+    config.jwtSecret,
+    { expiresIn: TOKEN_TTL_SECONDS }
+  );
+
+  return ok(res, { token, expiresIn: TOKEN_TTL_SECONDS, user: publicUser(user) });
 };
+
+module.exports.publicUser = publicUser;
+module.exports.TOKEN_TTL_SECONDS = TOKEN_TTL_SECONDS;

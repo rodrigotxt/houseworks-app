@@ -38,7 +38,8 @@ const TaskExecutionHistorySchema = new mongoose.Schema({
     max: [5, 'A avaliação máxima é 5.']
   }
 }, {
-  timestamps: true // Adiciona automaticamente `createdAt` e `updatedAt`
+  timestamps: true, // Adiciona automaticamente `createdAt` e `updatedAt`
+  toJSON: require('../config/serialization'), // expoe "id", omite "_id"/"__v"
 });
 
 // Adiciona um índice composto para garantir que um usuário não possa registrar a mesma tarefa como concluída
