@@ -1,6 +1,10 @@
 # HouseWorks — Roadmap da API
 
 > **Estratégia: API First.** O contrato em [`docs/openapi.yaml`](./openapi.yaml) é a fonte de verdade.
+>
+> **Status: as seis fases estão concluídas e a API cobre o contrato inteiro** — as 36 operações
+> declaradas respondem (verificado batendo em cada rota do `openapi.yaml`; nenhuma cai em
+> `ROUTE_NOT_FOUND`). O que resta antes de começar a UI é uma decisão de repositório, o item P12.
 > Nenhuma regra de negócio nasce no frontend: o front apenas consome o que está especificado aqui.
 > Ordem de execução: **API 100% pronta → depois o frontend.**
 
