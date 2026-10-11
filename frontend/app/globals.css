@@ -1,0 +1,27 @@
+/* app/globals.css
+   Quase tudo vem do MUI (CssBaseline + tema). Aqui fica só o que é global de verdade e
+   independe do tema — o Tailwind que existia aqui foi removido: manter dois sistemas de
+   estilo para a mesma interface é custo de manutenção sem contrapartida. */
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  /* O app instalado no celular não deve "quicar" ao rolar além do fim. */
+  overscroll-behavior-y: none;
+  /* Sem o flash cinza ao tocar num alvo no Android. */
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Respeita quem pediu menos animação no sistema — vale também para o painel da TV. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

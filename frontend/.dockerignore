@@ -1,0 +1,13 @@
+# Sem isto, o "COPY . ." arrastaria o node_modules e o .next do host para dentro da
+# imagem, sobrescrevendo o que o npm ci instalou e engordando o contexto de build.
+node_modules
+.next
+coverage
+
+.env
+.env.*
+!.env.example
+
+.git
+.gitignore
+*.log
