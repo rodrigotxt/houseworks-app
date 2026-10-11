@@ -38,7 +38,9 @@ function startScheduler() {
             summary.created +
             ' criadas, ' +
             summary.overdue +
-            ' marcadas como atrasadas em ' +
+            ' marcadas como atrasadas, ' +
+            summary.autoApproved +
+            ' execucoes auto-aprovadas em ' +
             summary.households +
             ' casa(s)'
         );

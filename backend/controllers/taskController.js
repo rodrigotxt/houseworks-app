@@ -5,7 +5,7 @@
 
 const Task = require('../models/Task');
 const Membership = require('../models/Membership');
-const TaskExecutionHistory = require('../models/TaskExecutionHistory');
+const TaskExecution = require('../models/TaskExecution');
 const ApiError = require('../utils/apiError');
 const ErrorCode = require('../utils/errorCodes');
 const { ok, created, noContent, pageMeta } = require('../utils/respond');
@@ -180,7 +180,7 @@ exports.remove = async (req, res) => {
       );
     }
 
-    await TaskExecutionHistory.deleteMany({ task: task._id });
+    await TaskExecution.deleteMany({ task: task._id });
     await require('../models/TaskOccurrence').deleteMany({ task: task._id });
     await Task.deleteOne({ _id: task._id });
 

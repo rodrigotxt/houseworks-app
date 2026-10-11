@@ -1,12 +1,11 @@
 // tests/helpers/fixtures.js
-// Monta estado que a API ainda nao sabe criar.
+// Atalhos para montar o cenario de teste.
 //
-// A criacao de execucao sai do contrato na Fase 1b: no desenho final ela acontece
-// ao concluir uma ocorrencia (POST /occurrences/:id/complete), que chega na Fase 3.
-// Ate la os testes gravam a execucao direto no modelo, reproduzindo exatamente o
-// estado que a Fase 3 vai produzir pela API.
+// Depois da Fase 3 a criacao de execucao tem caminho proprio na API
+// (POST /occurrences/:id/complete) e os testes usam esse caminho. O seedOccurrence
+// continua existindo para montar estados que o gerador nao produz sozinho — tipicamente
+// uma ocorrencia vencida no passado.
 
-const TaskExecutionHistory = require('../../models/TaskExecutionHistory');
 const TaskOccurrence = require('../../models/TaskOccurrence');
 const { todayInZone } = require('../../services/time');
 
@@ -33,24 +32,28 @@ async function createTask(token, householdId, body) {
   return response;
 }
 
-// Ocorrencia gravada direto no modelo. Usada para montar estados que o gerador nao
-// produz sozinho — tipicamente uma ocorrencia vencida no passado.
 async function seedOccurrence(fields) {
   return TaskOccurrence.create(
     Object.assign({ status: 'pending', points: 1, dueDate: todayInZone('America/Sao_Paulo') }, fields)
   );
 }
 
-async function seedExecution(fields) {
-  return TaskExecutionHistory.create(
-    Object.assign(
-      {
-        completionDate: new Date(),
-        note: 'Feito.',
-      },
-      fields
-    )
-  );
+// Primeira ocorrencia de uma tarefa, ja materializada pela criacao dela.
+async function firstOccurrence(householdId, taskId) {
+  return TaskOccurrence.findOne({ household: householdId, task: taskId }).sort({ dueDate: 1 });
 }
 
-module.exports = { createTask, seedExecution, seedOccurrence, defaultRecurrence };
+function completeOccurrence(token, occurrenceId, body) {
+  return request(app)
+    .post('/api/v1/occurrences/' + occurrenceId + '/complete')
+    .set(bearer(token))
+    .send(body || {});
+}
+
+module.exports = {
+  createTask,
+  seedOccurrence,
+  firstOccurrence,
+  completeOccurrence,
+  defaultRecurrence,
+};

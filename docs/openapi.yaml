@@ -1104,9 +1104,12 @@ paths:
       tags: [Executions]
       summary: Desfazer conclusão
       description: |
-        Reverte a ocorrência para `pending` e remove a execução associada — **incluindo os pontos já
-        computados**. Quem executou pode desfazer a própria execução dentro da janela; `owner` pode
-        desfazer qualquer uma. Registra em log de auditoria (nunca apaga silenciosamente).
+        Remove a execução associada — **incluindo os pontos já computados** — e devolve a ocorrência
+        ao estado que o calendário determina hoje: `pending`, ou `overdue` se o prazo já passou.
+
+        Quem executou pode desfazer a própria execução enquanto a janela de avaliação da casa
+        (`ratingWindowHours`) estiver aberta; `owner` pode desfazer qualquer uma, a qualquer tempo.
+        Fica registrado em log de auditoria — nunca apaga em silêncio.
       operationId: undoOccurrence
       responses:
         '200':

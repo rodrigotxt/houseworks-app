@@ -12,6 +12,7 @@ const Membership = require('../models/Membership');
 const Task = require('../models/Task');
 const TaskOccurrence = require('../models/TaskOccurrence');
 const { expandDueDates } = require('./recurrence');
+const { approveExpiredExecutions } = require('./executions');
 const { todayInZone, overdueCutoff, addDays, maxDate } = require('./time');
 
 function isDuplicateOnly(error) {
@@ -141,23 +142,28 @@ async function markOverdue(household, options) {
   return result.modifiedCount || 0;
 }
 
-// Geracao + atraso. E o que as rotas de agenda chamam antes de responder.
+// Geracao + atraso + auto-aprovacao. E o que as rotas de agenda chamam antes de responder.
+//
+// A auto-aprovacao entra aqui de proposito: se dependesse so do job diario, uma execucao
+// ficaria "aguardando avaliacao" para sempre num servidor que ficou parado.
 async function refreshHousehold(household, options) {
   const created = await ensureForHousehold(household, options);
   const overdue = await markOverdue(household, options);
+  const autoApproved = await approveExpiredExecutions(household, options);
 
-  return { created, overdue };
+  return { created, overdue, autoApproved };
 }
 
 // Job diario: percorre todas as casas.
 async function runDailyJob(options) {
   const households = await Household.find();
-  const summary = { households: households.length, created: 0, overdue: 0 };
+  const summary = { households: households.length, created: 0, overdue: 0, autoApproved: 0 };
 
   for (const household of households) {
     const result = await refreshHousehold(household, options);
     summary.created += result.created;
     summary.overdue += result.overdue;
+    summary.autoApproved += result.autoApproved;
   }
 
   return summary;

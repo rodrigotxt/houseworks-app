@@ -12,7 +12,7 @@ const Household = require('../models/Household');
 const Membership = require('../models/Membership');
 const Task = require('../models/Task');
 const TaskOccurrence = require('../models/TaskOccurrence');
-const TaskExecutionHistory = require('../models/TaskExecutionHistory');
+const TaskExecution = require('../models/TaskExecution');
 const { generateInviteCode, inviteExpiry } = require('../utils/inviteCode');
 const { runDailyJob } = require('../services/occurrences');
 const { todayInZone } = require('../services/time');
@@ -87,7 +87,7 @@ async function clearAll() {
     Membership.deleteMany(),
     Task.deleteMany(),
     TaskOccurrence.deleteMany(),
-    TaskExecutionHistory.deleteMany(),
+    TaskExecution.deleteMany(),
   ]);
 }
 
@@ -145,61 +145,55 @@ async function importData() {
   const summary = await runDailyJob();
   console.log('Agenda gerada: ' + summary.created + ' ocorrencias.');
 
-  // Duas execucoes: uma ja conferida e outra aguardando avaliacao.
-  const banheiro = tasks.find((task) => task.name === 'Limpar banheiro');
-  const louca = tasks.find((task) => task.name === 'Lavar louca');
+  // Duas execucoes: uma ja conferida por outro membro e outra aguardando avaliacao.
+  // Gravadas no modelo (e nao pela API) porque o seed monta Estado, nao fluxo — o
+  // caminho real (POST /occurrences/:id/complete) e coberto pelos testes.
+  async function concluir(nomeDaTarefa, executor, campos) {
+    const task = tasks.find((item) => item.name === nomeDaTarefa);
+    const occurrence = await TaskOccurrence.findOne({ task: task._id }).sort({ dueDate: 1 });
 
-  const ocorrenciaBanheiro = await TaskOccurrence.findOne({ task: banheiro._id }).sort({
-    dueDate: 1,
-  });
+    occurrence.status = 'done';
+    occurrence.completedAt = new Date();
+    occurrence.completedBy = usersByUsername[executor]._id;
+    await occurrence.save();
 
-  await TaskExecutionHistory.create({
-    household: household._id,
-    task: banheiro._id,
-    executedBy: usersByUsername.isabella._id,
+    return TaskExecution.create(
+      Object.assign(
+        {
+          household: household._id,
+          occurrence: occurrence._id,
+          task: task._id,
+          executedBy: usersByUsername[executor]._id,
+          points: occurrence.points,
+        },
+        campos
+      )
+    );
+  }
+
+  await concluir('Limpar banheiro', 'isabella', {
     note: 'Banheiro limpo e brilhando!',
+    status: 'approved',
     rating: 5,
     ratingNote: 'Ficou otimo, obrigada!',
+    ratedBy: usersByUsername.rodrigo._id,
+    ratedAt: new Date(),
   });
 
-  await TaskOccurrence.updateOne(
-    { _id: ocorrenciaBanheiro._id },
-    {
-      $set: {
-        status: 'done',
-        completedAt: new Date(),
-        completedBy: usersByUsername.isabella._id,
-      },
-    }
-  );
-
-  const ocorrenciaLouca = await TaskOccurrence.findOne({ task: louca._id }).sort({ dueDate: 1 });
-
-  await TaskExecutionHistory.create({
-    household: household._id,
-    task: louca._id,
-    executedBy: usersByUsername.arthur._id,
+  await concluir('Lavar louca', 'arthur', {
     note: 'Louca lavada e guardada.',
+    status: 'pending_review',
   });
-
-  await TaskOccurrence.updateOne(
-    { _id: ocorrenciaLouca._id },
-    {
-      $set: {
-        status: 'done',
-        completedAt: new Date(),
-        completedBy: usersByUsername.arthur._id,
-      },
-    }
-  );
 
   const pendentes = await TaskOccurrence.countDocuments({ status: 'pending' });
+  const aguardandoAvaliacao = await TaskExecution.countDocuments({ status: 'pending_review' });
 
   console.log('');
   console.log('Casa:              ' + household.name);
   console.log('Codigo de convite: ' + household.inviteCode);
   console.log('Senha de todos:    ' + PASSWORD);
   console.log('Ocorrencias pendentes na agenda: ' + pendentes);
+  console.log('Execucoes aguardando avaliacao:   ' + aguardandoAvaliacao);
   console.log('Usuarios:');
   FAMILY.forEach((member) => {
     console.log('  ' + member.role.padEnd(6) + member.username);

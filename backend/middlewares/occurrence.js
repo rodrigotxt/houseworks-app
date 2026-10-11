@@ -1,8 +1,12 @@
 // middlewares/occurrence.js
 // Mesma logica de task/execution: o escopo vem do recurso e quem nao e membro da
 // casa recebe 404 em vez de 403.
+//
+// A casa tambem vem carregada: o ciclo de vida da execucao depende do fuso, da
+// tolerancia de atraso e da janela de avaliacao dela.
 
 const TaskOccurrence = require('../models/TaskOccurrence');
+const Household = require('../models/Household');
 const Membership = require('../models/Membership');
 const ApiError = require('../utils/apiError');
 const ErrorCode = require('../utils/errorCodes');
@@ -26,6 +30,7 @@ async function loadOccurrence(req, res, next) {
 
   req.occurrence = occurrence;
   req.membership = membership;
+  req.household = await Household.findById(occurrence.household);
 
   return next();
 }

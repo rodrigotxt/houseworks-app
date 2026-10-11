@@ -169,16 +169,35 @@ ocorrências. Provado em `tests/recurrence.test.js` (bordas de calendário, sem 
 
 ### Fase 3 — Execução e avaliação (as regras do produto)
 
-- [ ] `POST /occurrences/{id}/complete` → cria `TaskExecution` em `pending_review` e fecha a ocorrência
-- [ ] `POST /occurrences/{id}/skip` e `POST /occurrences/{id}/undo` (desfazer é obrigatório — hoje não existe)
-- [ ] `PATCH /executions/{id}/rating`: **quem executou não avalia** (regra preservada), exige `canRate`
-- [ ] Janela de avaliação (`ratingWindowHours`, default 72h) → `409 RATING_WINDOW_CLOSED`
-- [ ] Auto-aprovação após a janela, com `rating: null` e `status: auto_approved`
-- [ ] Pontos só entram no score quando a execução é aprovada
+### Fase 3 — Execução e avaliação ✅
+
+- [x] `POST /occurrences/{id}/complete` → cria a execução em `pending_review` e fecha a ocorrência
+- [x] `POST /occurrences/{id}/skip` e `POST /occurrences/{id}/undo`
+- [x] `PATCH /executions/{id}/rating`: **quem executou não avalia**, exige `canRate`
+- [x] Janela de avaliação (`ratingWindowHours`, default 72h) → `409 RATING_WINDOW_CLOSED`
+- [x] Auto-aprovação após a janela, com `rating: null` e `status: auto_approved`
+- [x] Pontos só contam quando a execução é aprovada
+- [x] `TaskExecutionHistory` renomeado para `TaskExecution` (nome do contrato) e ganhou `occurrence`
+- [x] Fila de conferência (`?pendingReviewForMe=true`) e histórico por ocorrência
 
 **Aceite:** auto-avaliação → `403 CANNOT_RATE_OWN_EXECUTION`; avaliar duas vezes → `409 EXECUTION_ALREADY_RATED`;
 `undo` reverte ocorrência **e** subtrai os pontos do score; concluir ocorrência já concluída → `409`;
-`child` concluindo ocorrência de outro membro → `403 OCCURRENCE_NOT_ASSIGNED_TO_YOU`.
+quem não administra tarefas concluindo ocorrência de outro membro → `403 OCCURRENCE_NOT_ASSIGNED_TO_YOU`.
+Tudo coberto em `tests/executions.test.js` (32 casos).
+
+**Decisões tomadas na execução:**
+
+1. **Desfazer REMOVE a execução** — é assim que os pontos saem do placar, por consequência, sem nenhum
+   ajuste manual de score. O evento vai para log de auditoria (`utils/audit.js`), como o contrato exige
+   ("nunca apaga silenciosamente"). Se a operação passar a exigir auditoria consultável, o log vira coleção
+   sem mudar o ponto de chamada.
+2. **Desfazer não devolve "pending" cego.** A ocorrência volta ao estado que o calendário determina hoje:
+   `pending`, ou `overdue` se o prazo já passou — senão uma ocorrência vencida reapareceria como se ainda
+   desse tempo.
+3. **Registro retroativo limitado a 7 dias**, e nunca no futuro. Dá para marcar o que se esqueceu, sem
+   reescrever o mês passado.
+4. **A ordem das checagens na avaliação importa:** status antes da janela, para que "avaliou duas vezes" e
+   "avaliou atrasado" sejam erros distintos.
 
 ### Fase 4 — Desempenho e agregações
 
@@ -197,7 +216,7 @@ ocorrências. Provado em `tests/recurrence.test.js` (bordas de calendário, sem 
 - [ ] Paginação/filtros/ordenação em todas as listagens (hoje `getAllTasks` devolve tudo)
 - [ ] **Rotacionar `JWT_SECRET`** e remover segredos do Git (`.env` → `.env.example` + secret no deploy)
 - [ ] Refresh de token / expiração consistente (backend `1h` vs front `JWT_EXPIRES_IN=3h`)
-- [ ] Remover código morto: `config/` na raiz, `routes/other.js`, `app/api/test-env.ts`
+- [ ] Remover código morto restante: `config/` na raiz e `app/api/test-env.ts` (`routes/other.js` saiu na Fase 1b)
 - [ ] CI (lint + test + lint do spec) — a suíte de testes já existe desde a Fase 0
 - [ ] Dockerfile em multi-stage com `npm ci --omit=dev` na imagem final: hoje o `npm install` do
   container instala também jest/supertest/mongodb-memory-server, que só servem ao desenvolvimento

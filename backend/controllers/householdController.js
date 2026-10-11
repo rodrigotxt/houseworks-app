@@ -6,7 +6,7 @@
 const Household = require('../models/Household');
 const Membership = require('../models/Membership');
 const Task = require('../models/Task');
-const TaskExecutionHistory = require('../models/TaskExecutionHistory');
+const TaskExecution = require('../models/TaskExecution');
 const ApiError = require('../utils/apiError');
 const ErrorCode = require('../utils/errorCodes');
 const { ok, created, noContent } = require('../utils/respond');
@@ -140,7 +140,7 @@ exports.remove = async (req, res) => {
   await Promise.all([
     Membership.deleteMany({ household: householdId }),
     Task.deleteMany({ household: householdId }),
-    TaskExecutionHistory.deleteMany({ household: householdId }),
+    TaskExecution.deleteMany({ household: householdId }),
   ]);
   await Household.deleteOne({ _id: householdId });
 

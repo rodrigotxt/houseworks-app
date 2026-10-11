@@ -47,8 +47,34 @@ const listTaskOccurrencesQuerySchema = z
   .strictObject(Object.assign({}, window, { status: status.optional() }))
   .refine(orderedWindow, ORDER_MESSAGE);
 
+// Corpo opcional: concluir sem corpo nenhum e o caso comum.
+// O .default({}) existe porque req.body chega undefined quando nao ha corpo.
+const completeOccurrenceSchema = z
+  .strictObject({
+    note: z
+      .string()
+      .trim()
+      .max(500, { message: 'A nota deve ter no maximo 500 caracteres.' })
+      .optional(),
+    // Registro retroativo de quem esqueceu de marcar (limite em services/executions.js).
+    completionDate: z.coerce.date({ message: 'Data de conclusao invalida.' }).optional(),
+  })
+  .default({});
+
+const skipOccurrenceSchema = z
+  .strictObject({
+    reason: z
+      .string()
+      .trim()
+      .max(300, { message: 'O motivo deve ter no maximo 300 caracteres.' })
+      .optional(),
+  })
+  .default({});
+
 module.exports = {
   listOccurrencesQuerySchema,
   listMyOccurrencesQuerySchema,
   listTaskOccurrencesQuerySchema,
+  completeOccurrenceSchema,
+  skipOccurrenceSchema,
 };
