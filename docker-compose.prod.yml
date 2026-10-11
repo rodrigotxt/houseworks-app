@@ -58,7 +58,7 @@ services:
 
   frontend:
     build:
-      context: ../houseworks-frontend
+      context: ./frontend
       target: production
       args:
         # Embutido no bundle em tempo de BUILD. Trocar de domínio exige reconstruir esta

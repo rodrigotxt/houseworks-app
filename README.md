@@ -1,11 +1,17 @@
-# HouseWorks — API
+# HouseWorks
 
-API de gestão de tarefas domésticas para uma família: a casa divide as tarefas, alguém executa e
+Gestão de tarefas domésticas para uma família: a casa divide as tarefas, alguém executa e
 **outro membro confere e dá a nota**.
 
-Node.js 22 · Express · MongoDB · JWT · contrato OpenAPI 3.1.
+| | |
+|---|---|
+| [`backend/`](./backend) | Node.js 22 · Express · MongoDB · JWT — a API |
+| [`frontend/`](./frontend) | Next.js 15 · React 19 · MUI 7 · PWA instalável — a interface |
+| [`docs/`](./docs) | contrato, domínio, decisões, operação e implantação |
 
-> O frontend vive em um repositório **irmão**: [`../houseworks-frontend`](../houseworks-frontend).
+> **Um repositório só.** O contrato em [`docs/openapi.yaml`](./docs/openapi.yaml) é a fonte de
+> verdade, e o frontend gera os tipos a partir dele — os dois versionados juntos, para não
+divergirem.
 
 ---
 
@@ -17,7 +23,8 @@ Node.js 22 · Express · MongoDB · JWT · contrato OpenAPI 3.1.
 | Entender as regras de negócio | [docs/DOMAIN.md](./docs/DOMAIN.md) |
 | Escrever código aqui | [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) — mapa, convenções e receituário |
 | Saber **por que** algo é assim | [docs/DECISIONS.md](./docs/DECISIONS.md) |
-| Rodar, configurar, testar, implantar | [docs/OPERATIONS.md](./docs/OPERATIONS.md) |
+| Rodar, configurar, testar | [docs/OPERATIONS.md](./docs/OPERATIONS.md) |
+| Colocar no ar (VPS, domínio, TLS, Komodo) | [docs/DEPLOY.md](./docs/DEPLOY.md) |
 | Construir a UI | [docs/FRONTEND.md](./docs/FRONTEND.md) |
 | Ver o histórico e o que falta | [docs/ROADMAP.md](./docs/ROADMAP.md) |
 
@@ -51,7 +58,7 @@ O seed imprime o **código de convite** da casa e a senha dos usuários de exemp
 ## Testes
 
 ```bash
-cd backend && npm test            # 186 testes, ~2 min
+cd backend && npm test            # 187 testes, ~3 min
 npx @redocly/cli lint docs/openapi.yaml
 ```
 
@@ -72,7 +79,8 @@ backend/
   models/        schema, índices e invariantes
   schemas/       validação de entrada (zod)
   tests/         suíte completa
-docs/            contrato, domínio, decisões, operação e guia do front
+frontend/        a interface (mesmo repositório — ver frontend/README.md)
+docs/            contrato, domínio, decisões, operação, implantação e guia do front
 ```
 
 Detalhamento em [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md).
@@ -82,6 +90,7 @@ Detalhamento em [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md).
 ## Estado
 
 Todas as seis fases do [roadmap](./docs/ROADMAP.md) estão concluídas e **as 36 operações do
-contrato respondem** — verificado batendo em cada rota declarada. 186 testes verdes.
+contrato respondem** — verificado batendo em cada rota declarada. 187 testes verdes.
 
-O que falta é a interface: o frontend nasce contra este contrato.
+A interface já cobre Tarefas, Agenda e Desempenho, além do painel da TV. O que ainda falta está
+listado no fim do [README do frontend](./frontend/README.md).

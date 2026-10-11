@@ -48,9 +48,8 @@ Pré-requisitos: uma VPS com Docker e Docker Compose, um domínio com registro *
 para o IP dela, e as portas **80 e 443** livres.
 
 ```bash
-# 1. Os dois repositórios lado a lado — o compose de produção referencia o irmão.
+# 1. Um clone só: o frontend vive em frontend/, dentro deste repositório.
 git clone https://github.com/rodrigotxt/houseworks-app.git
-git clone https://github.com/rodrigotxt/houseworks-frontend.git
 
 # 2. Configuração
 cd houseworks-app
@@ -159,7 +158,50 @@ arquivo **fora da VPS** — backup no mesmo disco não protege contra a perda do
 
 ---
 
-## 7. Alternativa: serviços gerenciados
+## 7. Com um painel: Komodo
+
+Se você já administra a VPS com o [Komodo](https://komo.do), quase tudo do § 5 vira botão. O
+`Caddyfile` e o `docker-compose.prod.yml` continuam valendo — o Komodo só passa a ser quem os
+executa.
+
+**Stack** — um recurso só, apontando para este repositório:
+
+| Campo | Valor | Por quê |
+|---|---|---|
+| `server` | a sua VPS | onde os containers rodam |
+| `repo` / `branch` | `rodrigotxt/houseworks-app` / `main` | o Komodo clona e dá `git pull` |
+| `file_paths` | `docker-compose.prod.yml` | o padrão do Komodo é `compose.yaml`, que não existe aqui |
+| `run_build` | `true` | o compose usa `build:`; sem isto o deploy não reconstrói as imagens |
+| `environment` | o conteúdo do `.env.prod` | ele escreve o arquivo e passa por `--env-file` |
+| `webhook_enabled` | `true` | um push em `main` dispara o redeploy |
+
+`clone_path` e `run_directory` ficam **vazios** de propósito: o padrão já é o diretório do
+repositório clonado, e é lá que o `Caddyfile` está para ser montado pelo compose.
+
+### Os segredos saem do arquivo
+
+Em vez de manter `MONGO_PASSWORD` e `JWT_SECRET_KEY` em texto no `.env.prod` da VPS, crie-os em
+*Settings → Variables* marcando **secret**, e interpole no campo `environment` com colchetes duplos:
+
+    MONGO_PASSWORD = [[MONGO_PASSWORD]]
+    JWT_SECRET_KEY = [[JWT_SECRET_KEY]]
+
+O valor não aparece em log nem em update, e não é legível por usuário não-admin. O `.env.prod`
+deixa de ser a cópia mais valiosa do servidor.
+
+### Por que o monorepo importa aqui
+
+O Komodo clona o repositório de cada Stack num diretório próprio (`<stack_dir>/<nome-da-stack>/`).
+Enquanto o front vivia em outro repositório, o compose o alcançava por `../houseworks-frontend` —
+caminho que simplesmente não existe ali, e o build falharia no deploy. Foi o que motivou reunir os
+dois; ver **D22** em [DECISIONS.md](./DECISIONS.md).
+
+> **Portas 80 e 443.** O Caddy precisa das duas para emitir e renovar o certificado. Se o Komodo
+> Core estiver publicando em uma delas, mova-o antes de subir esta stack.
+
+---
+
+## 8. Alternativa: serviços gerenciados
 
 Se preferir não administrar servidor, dá para montar com peças gerenciadas — **desde que o
 domínio continue sendo um só** (§ 1):
@@ -183,7 +225,7 @@ requisição depois disso demora alguns segundos.
 
 ---
 
-## 8. Custo realista
+## 9. Custo realista
 
 | Caminho | Custo mensal | Manutenção |
 |---|---|---|
@@ -194,9 +236,13 @@ requisição depois disso demora alguns segundos.
 Para uma família, a VPS de US$ 5 roda isto com folga: o app é pequeno e o consumo maior é o
 build do Next, não o tráfego.
 
+Se a VPS já existe e já roda Komodo (§ 7), o custo marginal é zero — e foi de propósito: o
+desenho evita serviços gerenciados justamente para não somar assinaturas a algo que roda numa
+máquina que você já paga.
+
 ---
 
-## 9. O que está pronto e o que não está
+## 10. O que está pronto e o que não está
 
 **Pronto e verificado em produção:** TLS automático, cookie seguro, sessão revogável, limite de
 tentativas no login, cabeçalhos de segurança, banco sem porta pública, healthcheck do Mongo.

@@ -28,8 +28,8 @@ docker compose exec backend npm run seed
 A API fica em **http://localhost:3001** (a porta 3000 interna é publicada na 3001 para não
 disputar com o front).
 
-`docker compose up` sem argumentos sobe também o `frontend`, que vive em um **repositório irmão**
-(`../houseworks-frontend`) — os dois checkouts precisam estar lado a lado.
+`docker compose up` sem argumentos sobe também o `frontend`, que vive em `frontend/` neste
+mesmo repositório. Um clone basta.
 
 ### Opção B — local, com Mongo no container
 
@@ -155,8 +155,7 @@ roda como usuário `node`.
 > na imagem não consegue lê-lo e morre com `EACCES` ao carregar um módulo. O `COPY --chown=node:node`
 > protege contra isso, mas manter os arquivos legíveis (`644`) é o certo de qualquer forma.
 
-O `frontend/Dockerfile` (no repositório irmão) segue o mesmo Runtime (node:22-alpine) e usa
-`npm ci`.
+O `frontend/Dockerfile` segue o mesmo Runtime (node:22-alpine) e usa `npm ci`.
 
 ---
 
@@ -183,7 +182,7 @@ continua **correto** (o índice único garante), apenas redundante.
 |---|---|
 | `JWT_SECRET nao definido` na subida | Falta a variável. Copie `.env.example` para `.env` |
 | Backend não conecta após trocar `MONGO_PASSWORD` | O Mongo só aplica a senha de root na **primeira** inicialização. Recrie o volume: `docker compose down -v` |
-| `docker compose up` falha no serviço `frontend` | Ele vive no repositório irmão. Use `docker compose up -d mongodb backend` ou tenha os dois checkouts |
+| `docker compose up` falha no serviço `frontend` | Build do front quebrado — veja `docker compose logs frontend`. Para trabalhar só na API: `docker compose up -d mongodb backend` |
 | `EACCES` ao carregar módulo na imagem | Arquivo com permissão restritiva. `chmod 644` — ver §7 |
 | Testes travando na primeira execução | Está baixando o binário do `mongod` (~120MB) |
 | `429 RATE_LIMITED` durante desenvolvimento | Limite de tentativas. Ajuste `RATE_LIMIT_MAX` ou `RATE_LIMIT_ENABLED=false` |

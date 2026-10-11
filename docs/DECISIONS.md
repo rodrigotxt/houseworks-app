@@ -346,16 +346,27 @@ demonstração quebraria testes sem relação com a mudança.
 
 ## H. Estrutura e operação
 
-### D22 — Repositórios irmãos, sem submódulo
+### D22 — Um repositório só (monorepo)
 
 **Contexto.** `houseworks-app/frontend/` era um submódulo **nunca inicializado** (pasta vazia), e
 existia um clone completo do mesmo repositório ao lado. O compose construía contra o vazio.
 
-**Decisão.** Remover o submódulo; os dois repositórios são irmãos, como o
-`HouseWorks.code-workspace` já supunha.
+**Primeira decisão.** Remover o submódulo e manter dois repositórios **irmãos**. Resolveu a
+ambiguidade imediata, mas trocou por um acoplamento de caminho relativo que só valia na máquina de
+quem tinha os dois clones lado a lado: `docker-compose.prod.yml` apontava para
+`../houseworks-frontend`, e `frontend/scripts/generate-api-types.mjs` lia o contrato em
+`../houseworks-app/docs/openapi.yaml`.
 
-**Consequência.** `docker compose up` passa a exigir os dois checkouts; para trabalhar só na API,
-`docker compose up -d mongodb backend`.
+**Decisão (revisada).** Reunir tudo em um **monorepo**: `backend/` e `frontend/` no mesmo
+repositório. Dois argumentos forçaram a revisão. O primeiro é operacional: o Komodo clona o
+repositório de cada stack num diretório próprio (`bin/periphery/src/stack/mod.rs`), onde o
+repositório irmão não existe — o build do front falharia no deploy. O segundo é de fundo, e vem do
+próprio API-first: o contrato e o cliente gerado a partir dele não deveriam ser versionados em
+separado, porque nada impede um `openapi.yaml` novo de conviver com um `schema.d.ts` velho.
+
+**Consequência.** Um clone basta e um push dispara um deploy. O histórico do frontend foi preservado
+com `git subtree`, não esmagado; o repositório `houseworks-frontend` fica arquivado no GitHub. Para
+trabalhar só na API, `docker compose up -d mongodb backend`.
 
 ### D26 — Sem camada de repositório e sem injeção de dependência
 

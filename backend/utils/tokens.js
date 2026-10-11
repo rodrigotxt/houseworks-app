@@ -8,7 +8,7 @@ const { randomUUID } = require('crypto');
 const config = require('../config');
 const RevokedToken = require('../models/RevokedToken');
 
-// Mesmo nome lido pelo middleware do Next.js (houseworks-frontend/middleware.ts) e
+// Mesmo nome lido pelo middleware do Next.js (frontend/middleware.ts) e
 // declarado no contrato como cookieAuth.
 const COOKIE_NAME = 'jwt_token';
 

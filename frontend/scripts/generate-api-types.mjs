@@ -2,18 +2,19 @@
 // Gera os tipos do cliente a partir do CONTRATO, e nao de interfaces escritas a mao.
 // Assim o front nao consegue divergir da API sem o build reclamar.
 //
-// O contrato vive no repositorio irmao. Se o seu layout for outro, aponte a variavel:
+// O contrato vive em docs/openapi.yaml, na raiz deste repositorio. Para apontar para outro:
 //
 //   API_SPEC=/caminho/para/openapi.yaml npm run gen:api
 //
-// O arquivo gerado e versionado de proposito: o frontend continua compilando sozinho,
-// sem depender de o repositorio da API estar do lado.
+// O arquivo gerado e versionado de proposito: o frontend continua compilando sem rodar a
+// geracao. O que ele nao faz e compilar contra um contrato desatualizado em silencio — o
+// schema commitado e a fonte, e um contrato novo so entra depois de `npm run gen:api`.
 
 import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-const padrao = '../houseworks-app/docs/openapi.yaml';
+const padrao = '../docs/openapi.yaml';
 const spec = resolve(process.env.API_SPEC ?? padrao);
 const destino = 'lib/domain/api/schema.d.ts';
 

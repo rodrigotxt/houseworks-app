@@ -6,9 +6,12 @@
 > declaradas respondem (verificado batendo em cada rota do `openapi.yaml`; nenhuma cai em
 > `ROUTE_NOT_FOUND`). Todos os problemas do baseline estão resolvidos.
 >
-> **Layout de repositórios (decidido):** `houseworks-app` (API) e `houseworks-frontend` são **repos
-> irmãos**, lado a lado. O submódulo foi removido — ele nunca foi inicializado e criava duas fontes
-> de verdade para o mesmo código. O `docker-compose.yml` referencia o irmão por `../houseworks-frontend`.
+> **Layout de repositórios (decidido e depois revisto):** um **monorepo** — `backend/` e `frontend/`
+> no mesmo repositório. A separação em dois repos foi abandonada ao levar o projeto para o Komodo,
+> que clona o repositório de cada stack num diretório próprio: o compose alcançava o front por
+> `../houseworks-frontend`, caminho que só existe com os dois clones lado a lado. De fundo, o
+> contrato e o cliente gerado a partir dele ficavam versionados em separado, livres para divergir.
+> Ver **D22** em [DECISIONS.md](./DECISIONS.md).
 > Nenhuma regra de negócio nasce no frontend: o front apenas consome o que está especificado aqui.
 > Ordem de execução: **API 100% pronta → depois o frontend.**
 
@@ -60,7 +63,8 @@ Auditoria do estado atual em `main` (último commit `e2aa0dc`, 2025-06-24).
 **Pendente apenas o P11 parcial:** o backend já expõe `/auth/me` e aceita cookie httpOnly; falta o
 front parar de decodificar o JWT por conta própria — trabalho da UI, não da API.
 
-O **P12** foi resolvido: submódulo removido e os dois repositórios passam a ser **irmãos**.
+O **P12** foi resolvido: submódulo removido e, depois, os dois repositórios reunidos em um
+**monorepo** (ver D22) — não há mais duas fontes de verdade.
 
 ---
 
@@ -327,7 +331,7 @@ A API está "100% pronta" quando, para cada rota do contrato:
 |---|---|---|
 | C1 | JWT incompatível: backend `{ user: {...} }` vs front `{ id, email, ... }` | Backend define os claims (`sub`, `householdId`, `role`); front apenas consome. |
 | C2 | `docker-compose` não define `NEXT_PUBLIC_API_BASE_URL` e `env_file: ./frontend/.env` não existe | Corrigir o serviço `frontend` antes do primeiro boot integrado. |
-| C3 | ~~Ambiguidade submódulo vs clone solto~~ **RESOLVIDO** | Submódulo removido; repos **irmãos**. O compose aponta para `../houseworks-frontend`. |
+| C3 | ~~Ambiguidade submódulo vs clone solto~~ **RESOLVIDO** | Monorepo: `backend/` e `frontend/` no mesmo repositório. O compose aponta para `./frontend`. |
 | C4 | Auth por `x-auth-token` (hoje) vs cookie httpOnly (front) | Contrato final: cookie `jwt_token` (httpOnly) **e** `Authorization: Bearer` para clientes não-browser. |
 | C5 | Sem CORS por ambiente | `ALLOWED_ORIGINS` via env; `localhost:3000` só em dev. |
 

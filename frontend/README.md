@@ -4,7 +4,8 @@ A interface do HouseWorks: as tarefas da casa, a agenda e o placar.
 
 Next.js 15 (App Router) · React 19 · TypeScript · MUI 7 · PWA instalável.
 
-> A API vive em um repositório **irmão**: [`../houseworks-app`](../houseworks-app).
+> Um repositório só: a API vive em [`backend/`](../backend) e o contrato que estes tipos seguem
+> está em [`docs/openapi.yaml`](../docs/openapi.yaml).
 
 ---
 
@@ -44,9 +45,9 @@ lib/
    reescrita.
 2. **Diferença de dispositivo mora só nos shells.** Um componente que pergunta "estou no
    celular?" provavelmente está no lugar errado.
-3. **Os tipos vêm do contrato, não da mão.** `npm run gen:api` lê o `openapi.yaml` do
-   repositório irmão e gera `lib/domain/api/schema.d.ts` (versionado). Se a API mudar, o
-   build reclama em vez de quebrar em produção.
+3. **Os tipos vêm do contrato, não da mão.** `npm run gen:api` lê `../docs/openapi.yaml` e
+   gera `lib/domain/api/schema.d.ts` (versionado). Se a API mudar, o build reclama em vez de
+   quebrar em produção.
 
 ---
 
@@ -58,8 +59,8 @@ npm install
 npm run dev               # http://localhost:3000
 ```
 
-A API precisa estar no ar (`cd ../houseworks-app && docker compose up -d mongodb backend`)
-e semeada (`npm run seed` lá). O seed imprime e-mail e senha dos usuários de exemplo.
+A API precisa estar no ar (`cd .. && docker compose up -d mongodb backend`) e semeada
+(`docker compose exec backend npm run seed`). O seed imprime e-mail e senha dos exemplos.
 
 **Duas URLs para a mesma API**, e isso não é redundância:
 

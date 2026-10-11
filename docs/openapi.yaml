@@ -273,7 +273,7 @@ paths:
       description: |
         Identidade do portador do token, com **todas** as suas memberships — é a chamada que o front
         faz no boot para descobrir em qual casa está e com qual papel. Substitui o hack atual de
-        decodificar o JWT no cliente (`houseworks-frontend/lib/auth.tsx`).
+        decodificar o JWT no cliente (`frontend/lib/auth.tsx`).
       operationId: getCurrentUser
       responses:
         '200':
