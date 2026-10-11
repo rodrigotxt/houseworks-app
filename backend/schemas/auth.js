@@ -1,6 +1,6 @@
 // schemas/auth.js
 // Entrada de POST /auth/register e POST /auth/login.
-// Fase 0 nao inclui householdName/timezone — isso entra com o modelo Household (Fase 1).
+// householdName/timezone criam a casa no proprio cadastro (modelo Household, Fase 1).
 
 const { z } = require('zod');
 const { email } = require('./common');
@@ -24,6 +24,17 @@ const registerSchema = z.strictObject({
     .string()
     .min(8, { message: 'Senha deve ter no minimo 8 caracteres.' })
     .max(72, { message: 'Senha deve ter no maximo 72 caracteres.' }),
+
+  // Com householdName, o cadastro cria a casa e torna o usuario owner dela.
+  householdName: z
+    .string()
+    .trim()
+    .min(2, { message: 'O nome da casa deve ter no minimo 2 caracteres.' })
+    .max(80, { message: 'O nome da casa deve ter no maximo 80 caracteres.' })
+    .optional(),
+
+  // Ignorado se householdName nao for informado.
+  timezone: z.string().trim().min(1).max(64).optional(),
 });
 
 const loginSchema = z

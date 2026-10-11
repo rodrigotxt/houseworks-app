@@ -39,7 +39,9 @@ const TaskExecutionHistorySchema = new mongoose.Schema({
   }
 }, {
   timestamps: true, // Adiciona automaticamente `createdAt` e `updatedAt`
-  toJSON: require('../config/serialization'), // expoe "id", omite "_id"/"__v"
+  // toObject E toJSON: documentos populados usam o toObject do schema filho.
+  toObject: require('../config/serialization').createJsonOptions(),
+  toJSON: require('../config/serialization').createJsonOptions(),
 });
 
 // Adiciona um índice composto para garantir que um usuário não possa registrar a mesma tarefa como concluída

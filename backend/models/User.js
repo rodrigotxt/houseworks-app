@@ -30,7 +30,9 @@ const UserSchema = new mongoose.Schema({
   }
 }, {
   timestamps: true, // Adiciona automaticamente `createdAt` e `updatedAt`
-  toJSON: require('../config/serialization'), // expoe "id", omite "_id"/"__v"
+  // toObject E toJSON: documentos populados usam o toObject do schema filho.
+  toObject: require('../config/serialization').createJsonOptions(),
+  toJSON: require('../config/serialization').createJsonOptions(),
 });
 
 // Método estático para buscar usuário por email ou username

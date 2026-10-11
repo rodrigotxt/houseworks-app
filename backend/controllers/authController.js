@@ -4,10 +4,13 @@
 
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const Household = require('../models/Household');
+const Membership = require('../models/Membership');
 const config = require('../config');
 const ApiError = require('../utils/apiError');
 const ErrorCode = require('../utils/errorCodes');
 const { created, ok } = require('../utils/respond');
+const { generateInviteCode, inviteExpiry } = require('../utils/inviteCode');
 
 // 1h. Precisa bater com o expiresIn anunciado no contrato e com o front (ROADMAP C1).
 const TOKEN_TTL_SECONDS = 3600;
@@ -24,11 +27,11 @@ function publicUser(user) {
   };
 }
 
-// @desc    Registrar usuario
+// @desc    Registrar usuario (opcionalmente ja criando a casa)
 // @route   POST /api/v1/auth/register
 // @access  Publico
 exports.registerUser = async (req, res) => {
-  const { name, username, email, password } = req.body;
+  const { name, username, email, password, householdName, timezone } = req.body;
 
   const emailTaken = await User.findOne({ email });
   if (emailTaken) {
@@ -46,7 +49,29 @@ exports.registerUser = async (req, res) => {
   // A senha e criptografada pelo pre-save do modelo.
   const user = await new User({ name, username, email, password }).save();
 
-  return created(res, { user: publicUser(user) });
+  const payload = { user: publicUser(user) };
+
+  // Com householdName, o cadastro ja cria a casa e torna o usuario owner dela:
+  // e o onboarding de uma familia nova em uma unica chamada.
+  if (householdName) {
+    const household = await new Household({
+      name: householdName,
+      timezone,
+      ownerId: user._id,
+      inviteCode: generateInviteCode(),
+      inviteCodeExpiresAt: inviteExpiry(),
+    }).save();
+
+    await new Membership({
+      user: user._id,
+      household: household._id,
+      role: 'owner',
+    }).save();
+
+    payload.household = household;
+  }
+
+  return created(res, payload);
 };
 
 // @desc    Autenticar e emitir JWT
@@ -68,13 +93,23 @@ exports.loginUser = async (req, res) => {
     throw ApiError.unauthenticated('Credenciais invalidas.', ErrorCode.INVALID_CREDENTIALS);
   }
 
-  const token = jwt.sign(
-    { user: { id: user.id, email: user.email, username: user.username } },
-    config.jwtSecret,
-    { expiresIn: TOKEN_TTL_SECONDS }
-  );
+  // O token carrega apenas a identidade. Casa e papel sao resolvidos por requisicao
+  // contra a Membership, porque um usuario pode pertencer a varias casas.
+  const token = jwt.sign({ sub: user.id }, config.jwtSecret, { expiresIn: TOKEN_TTL_SECONDS });
 
   return ok(res, { token, expiresIn: TOKEN_TTL_SECONDS, user: publicUser(user) });
+};
+
+// @desc    Usuario autenticado e suas memberships
+// @route   GET /api/v1/auth/me
+// @access  Privado
+// Substitui o hack de decodificar o JWT no cliente para descobrir quem esta logado.
+exports.me = async (req, res) => {
+  const memberships = await Membership.find({ user: req.userId })
+    .populate('user', 'name username')
+    .sort({ joinedAt: 1 });
+
+  return ok(res, { user: publicUser(req.user), memberships });
 };
 
 module.exports.publicUser = publicUser;

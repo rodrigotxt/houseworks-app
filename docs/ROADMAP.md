@@ -102,13 +102,25 @@ seguintes: `Task.frequency` ainda é string (o contrato pede o objeto `recurrenc
 
 ### Fase 1 — Fundação do domínio  ·  *primeiro commit de negócio*
 
-- [ ] Modelos `Household` e `Membership` (`role: owner | adult | child` + capacidades)
-- [ ] `Task` ganha `household`, `assignedTo`, `points`, `archivedAt`; `createdBy` mantido como auditoria
-- [ ] Middlewares `requireAuth` → `requireMember(householdId)` → `authorize(capability)`
-- [ ] **Eliminar as 4 cópias da checagem de ownership** (P6) e **fechar o furo P4**
-- [ ] Migração de dados: usuários existentes viram uma household `"Casa"` com memberships `owner`/`adult`/`child`
-- [ ] Rotas de leitura passam a ser escopadas por household (`GET /households/{id}/tasks`, etc.)
-- [ ] Índices: `Task{household,archivedAt}`, `Task{household,assignedTo}`, `Membership{user,household}` (unique)
+**Fase 1a — casas, papéis e autorização** ✅
+
+- [x] Modelos `Household` e `Membership` (`role: owner | adult | child` + capacidades **derivadas**, nunca gravadas)
+- [x] `requireAuth` (claim `sub`) → `requireMember` → `authorize(capability)` / `requireRole(...)`
+- [x] Rotas de casa: CRUD, convite (ler/rotacionar), membros e ingresso por código
+- [x] `GET /auth/me` com usuário + memberships; cadastro com `householdName` já cria a casa
+- [x] Proteção do último `owner` (não é rebaixado nem sai da casa)
+- [x] Índices `Membership{user,household}` (unique) e `Membership{household,role}`
+- [x] Isolamento entre casas provado por teste (não-membro → `403 NOT_HOUSEHOLD_MEMBER`)
+
+**Fase 1b — tarefas escopadas e fim do furo P4** *(pendente)*
+
+- [ ] `Task` ganha `household`, `assignedTo`, `points`, `archivedAt`; `status` vira `active | archived`
+- [ ] `TaskExecutionHistory` ganha `household` — **é isto que fecha o P4**
+- [ ] **Eliminar as cópias restantes da checagem de ownership** (P6) nos controllers
+- [ ] Rotas de tarefa passam para `/households/{householdId}/tasks` e `/tasks/{taskId}`
+- [ ] Cascata de `DELETE /households/{id}` passa a incluir tarefas e execuções
+- [ ] Seed reescrito para o modelo novo (não há base real a migrar — decisão do projeto)
+- [ ] Índices `Task{household,archivedAt}` e `Task{household,assignedTo}`
 
 **Aceite (testes de integração obrigatórios):**
 membro de outra casa recebe `403 NOT_HOUSEHOLD_MEMBER`/404 em **todas** as rotas;
