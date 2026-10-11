@@ -163,6 +163,7 @@ async function importData() {
           household: household._id,
           occurrence: occurrence._id,
           task: task._id,
+          dueDate: occurrence.dueDate,
           executedBy: usersByUsername[executor]._id,
           points: occurrence.points,
         },

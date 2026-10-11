@@ -34,6 +34,21 @@ const TaskExecutionSchema = new mongoose.Schema(
       required: [true, 'A tarefa executada e obrigatoria.'],
     },
 
+    // DESNORMALIZADO de proposito: e o eixo de TODO relatorio de desempenho.
+    //
+    // Sem ele, agregar por vencimento exigiria juntar cada execucao com a ocorrencia —
+    // num historico de dois anos isso significava 50 mil juncoes e 15 SEGUNDOS por
+    // consulta. Copiado aqui, o relatorio vira uma varredura de indice.
+    //
+    // A copia nao pode divergir: o dueDate de uma ocorrencia nunca muda. A unica coisa
+    // que apaga ocorrencias e a propria execucao (no undo) ou a exclusao da tarefa, que
+    // leva as duas junto.
+    dueDate: {
+      type: String,
+      required: [true, 'A data de vencimento da ocorrencia e obrigatoria.'],
+      match: [/^\d{4}-\d{2}-\d{2}$/, 'A data de vencimento deve estar no formato AAAA-MM-DD.'],
+    },
+
     executedBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
@@ -99,12 +114,16 @@ const TaskExecutionSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
-    toObject: createJsonOptions(),
-    toJSON: createJsonOptions(),
+    // dueDate e interno: o contrato expoe occurrenceId, e o vencimento vem da ocorrencia.
+    toObject: createJsonOptions({ omit: ['dueDate'] }),
+    toJSON: createJsonOptions({ omit: ['dueDate'] }),
   }
 );
 
 TaskExecutionSchema.index({ household: 1, completionDate: -1 });
+
+// Eixo do relatorio de desempenho.
+TaskExecutionSchema.index({ household: 1, dueDate: 1, status: 1 });
 
 // Fila de conferencia e varredura da auto-aprovacao.
 TaskExecutionSchema.index({ household: 1, status: 1, completionDate: 1 });

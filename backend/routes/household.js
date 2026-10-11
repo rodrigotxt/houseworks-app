@@ -8,6 +8,7 @@ const householdController = require('../controllers/householdController');
 const householdTaskRoutes = require('./householdTask');
 const householdExecutionRoutes = require('./householdExecution');
 const householdOccurrenceRoutes = require('./householdOccurrence');
+const householdStatsRoutes = require('./householdStats');
 const { requireAuth } = require('../middlewares/auth');
 const { requireMember, requireRole } = require('../middlewares/membership');
 const validate = require('../middlewares/validate');
@@ -92,6 +93,9 @@ router.delete(
 router.use('/:householdId/tasks', householdTaskRoutes);
 router.use('/:householdId/occurrences', householdOccurrenceRoutes);
 router.use('/:householdId/executions', householdExecutionRoutes);
+
+// Desempenho: /households/:householdId/stats e /leaderboard
+router.use('/:householdId', householdStatsRoutes);
 
 // @route   GET /households/:householdId
 // @desc    Detalhe da casa

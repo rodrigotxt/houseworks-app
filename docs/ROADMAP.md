@@ -201,13 +201,53 @@ Tudo coberto em `tests/executions.test.js` (32 casos).
 
 ### Fase 4 — Desempenho e agregações
 
-- [ ] `GET /households/{id}/stats?from&to` (taxa de conclusão, pontualidade, atraso médio, notas)
-- [ ] `GET /households/{id}/leaderboard?period=week|month|all`
-- [ ] `GET /me/score?householdId&period`
-- [ ] Aggregation pipelines no Mongo (nada de agregar no Node nem no front)
+### Fase 4 — Desempenho e agregações ✅
 
-**Aceite:** números conferem com fixture de seed conhecida (asserção exata, não aproximada);
-`p95 < 300ms` com 50k ocorrências geradas por script de volume.
+- [x] `GET /households/{id}/stats?from&to` — totais, por membro e por tarefa
+- [x] `GET /households/{id}/leaderboard?period=week|month|all`
+- [x] `GET /me/score?householdId&period`
+- [x] Tudo agregado no Mongo (`services/stats.js`): nada somado no Node nem no front
+- [x] `scripts/seed-volume.js` para medir com volume realista
+
+**Aceite:** números conferem com fixture conhecida (asserção **exata**, não aproximada) em
+`tests/stats.test.js`; `p95 < 300ms` com 50k ocorrências — **atendido** (ver medições abaixo).
+
+**Decisões tomadas na execução:**
+
+1. **Eixo único: a data de vencimento.** "A semana" é "as tarefas cuja semana era esta", não
+   "o que foi marcado como feito nestes sete dias" — assim o relatório bate com a agenda que a
+   família vê. Consequência registrada no contrato: uma ocorrência vencida no domingo e concluída
+   na segunda conta para a semana anterior.
+2. **Semana começando no domingo**, igual à convenção de `weekdays` na recorrência (0 = domingo).
+3. **Todos os membros aparecem, inclusive com zero.** Um ranking que esconde quem não fez nada
+   esconde exatamente a informação que interessa numa casa.
+4. **Membros medidos por quem executou; pendências por quem foi designado.** São eixos diferentes
+   de propósito: `assignedTo` costuma ser nulo ("qualquer um pode assumir"), então agrupar tudo
+   por ele deixaria a maior parte do trabalho sem dono.
+5. **O período é o calendário cheio.** Numa semana em andamento a taxa de conclusão parece baixa
+   porque de fato está: a semana não acabou.
+6. **O vencimento é desnormalizado na execução** (`TaskExecution.dueDate`). A primeira versão
+   partia da execução e juntava cada uma com a sua ocorrência: 50 mil junções e **15 segundos** num
+   relatório de histórico completo. Com o eixo do relatório copiado na execução, a consulta virou
+   varredura de índice com `$facet` produzindo as duas agrupações de uma vez.
+
+**Medições com 50k ocorrências e 28k execuções** (`scripts/seed-volume.js`):
+
+| Endpoint | Antes (com `$lookup`) | Depois (desnormalizado) |
+|---|---|---|
+| `/stats` semana | p95 103ms | **p95 44ms** |
+| `/stats` 30 dias | p95 225ms | **p95 38ms** |
+| `/stats` mês | p95 197ms | **p95 53ms** |
+| `/leaderboard` | p95 115ms | **p95 37ms** |
+| `/me/score` | p95 208ms | **p95 40ms** |
+| `/stats` histórico completo | p50 14 909ms | **p50 662ms** |
+
+A cópia não pode divergir: o `dueDate` de uma ocorrência nunca muda, e as únicas operações que
+apagam ocorrências (desfazer e excluir a tarefa) levam as execuções junto.
+
+**Pendência conhecida:** `GET /households/{id}/occurrences` fica em p95 223ms numa janela de 30
+dias sobre esse volume — o custo está no backfill e na marcação de atraso que antecedem a leitura,
+não na consulta. Cabe na Fase 5 se incomodar.
 
 ### Fase 5 — Endurecimento
 

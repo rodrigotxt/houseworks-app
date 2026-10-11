@@ -92,6 +92,8 @@ async function completeOccurrence(occurrence, membership, input, options) {
     household: occurrence.household,
     occurrence: occurrence._id,
     task: occurrence.task,
+    // Eixo do relatorio de desempenho (desnormalizado — ver models/TaskExecution.js).
+    dueDate: occurrence.dueDate,
     executedBy: membership.user,
     completionDate,
     note: payload.note,

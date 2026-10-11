@@ -792,7 +792,12 @@ paths:
     get:
       tags: [Stats]
       summary: Estatísticas da casa
-      description: Agregado no servidor (aggregation pipeline). Sem intervalo, considera os últimos 30 dias.
+      description: |
+        Agregado inteiramente no banco (aggregation pipeline) — nada é somado na aplicação
+        nem no cliente.
+
+        Sem intervalo informado, considera os últimos 30 dias. `from` e `to` são interpretados
+        como dias do calendário da casa.
       operationId: getHouseholdStats
       parameters:
         - $ref: '#/components/parameters/FromDate'
@@ -819,7 +824,14 @@ paths:
     get:
       tags: [Stats]
       summary: Ranking de membros
-      description: Ordenado por pontos decrescentes; empate resolvido por maior taxa de pontualidade.
+      description: |
+        Ordenado por pontos decrescentes; empate resolvido por maior taxa de pontualidade.
+
+        `period=week` é a semana **começando no domingo** — mesma convenção dos `weekdays` da
+        recorrência (0 = domingo). `month` é o mês corrente. `all` vai da primeira ocorrência
+        da casa até hoje.
+
+        Membros sem nenhuma atividade no período aparecem com zero.
       operationId: getLeaderboard
       parameters:
         - name: period
@@ -2099,29 +2111,44 @@ components:
 
     MemberStats:
       type: object
+      description: |
+        Desempenho de um membro. **Todos os membros da casa aparecem**, inclusive os sem
+        nenhuma atividade — um ranking que esconde quem não fez nada esconde a informação
+        que interessa.
+
+        Os campos vêm de eixos diferentes, de propósito: `points`, `completed`, `onTimeRate`
+        e `avgRating` medem **quem executou** (`executedBy`), porque é isso que a avaliação
+        pontua. `overdue` e `skipped` medem as ocorrências **designadas** ao membro
+        (`assignedTo`), que é de quem a pendência era. Como `assignedTo` costuma ser nulo
+        ("qualquer um pode assumir"), agrupar tudo por ele deixaria a maior parte do trabalho
+        sem dono — por isso a divisão.
       required: [user, points, completed, overdue, skipped, onTimeRate, avgRating]
       properties:
         user:
           $ref: '#/components/schemas/UserRef'
         points:
           type: integer
-          description: Soma dos pontos de execuções aprovadas no período.
+          description: Soma dos pontos das execuções aprovadas que este membro fez no período.
           example: 42
         completed:
           type: integer
+          description: Quantas execuções este membro registrou no período.
           example: 12
         overdue:
           type: integer
+          description: Ocorrências vencidas que estavam designadas a ele.
           example: 2
         skipped:
           type: integer
+          description: Ocorrências puladas que estavam designadas a ele.
           example: 1
         onTimeRate:
           type: number
           format: float
           minimum: 0
           maximum: 1
-          description: Fração das conclusões feitas até o `dueDate`.
+          description: |
+            Fração das execuções dele concluídas até o fim do dia de vencimento, no fuso da casa.
           example: 0.83
         avgRating:
           oneOf:
@@ -2130,7 +2157,7 @@ components:
               minimum: 1
               maximum: 5
             - type: 'null'
-          description: Média das notas recebidas. `null` se nada foi avaliado no período.
+          description: Média das notas recebidas. `null` se nada dele foi avaliado no período.
           example: 4.7
 
     TaskStats:
@@ -2151,11 +2178,24 @@ components:
         avgCompletionDelayHours:
           type: number
           format: float
-          description: Atraso médio em horas (negativo indica adiantamento).
+          description: |
+            Atraso médio em horas, medido do **fim do dia de vencimento** no fuso da casa.
+            Negativo indica conclusão antes do prazo. `0` quando não houve conclusão no período.
           example: 6.5
 
     HouseholdStats:
       type: object
+      description: |
+        Relatório de desempenho da casa.
+
+        **Eixo único: a data de vencimento da ocorrência.** "A semana" significa "as tarefas
+        cuja semana era esta", e não "o que foi marcado como feito nestes sete dias". Isso
+        mantém o relatório alinhado com a agenda que a família vê — com uma consequência que
+        vale saber: uma ocorrência vencida no domingo e concluída na segunda conta para a
+        semana **anterior**.
+
+        O período é o calendário **cheio**. Numa semana em andamento, a taxa de conclusão
+        parece baixa porque de fato está: a semana ainda não acabou.
       required: [householdId, from, to, totals, byMember, byTask]
       properties:
         householdId:
