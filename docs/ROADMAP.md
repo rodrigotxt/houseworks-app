@@ -33,9 +33,10 @@ Auditoria do estado atual em `main` (último commit `e2aa0dc`, 2025-06-24).
 | P11 | Contrato de auth quebrado | Backend assina `{ user: {...} }`; front tipa `{ id, email, ... }` e lê `user.email` | Dashboard renderiza `undefined`. |
 | P12 | Ambiguidade de repositório | `houseworks-app/frontend/` é submódulo vazio + clone solto em `houseworks-frontend/` | Duas fontes de verdade que vão divergir. |
 
-**Resolvidos até aqui (Fases 0, 1 e 2):** P1, P2, P3, P4, P5, P6, P7, P8 e P10.
-**Pendentes:** P9 e P12 (Fase 5), P11 (parcial — o backend já expõe `/auth/me`; falta o front parar de
-decodificar o JWT por conta própria).
+**Resolvidos até aqui (Fases 0 a 5):** P1, P2, P3, P4, P5, P6, P7, P8, **P9** e P10.
+**Pendentes:** **P12** (submódulo vs repos irmãos — decisão de repositório, não de código) e **P11**
+parcial: o backend já expõe `/auth/me` e aceita cookie httpOnly; falta o front parar de decodificar o
+JWT por conta própria.
 
 ---
 
@@ -249,20 +250,37 @@ apagam ocorrências (desfazer e excluir a tarefa) levam as execuções junto.
 dias sobre esse volume — o custo está no backfill e na marcação de atraso que antecedem a leitura,
 não na consulta. Cabe na Fase 5 se incomodar.
 
-### Fase 5 — Endurecimento
+### Fase 5 — Endurecimento ✅
 
 - [x] ~~Validação de entrada com schema (zod), eliminando mass-assignment~~ — **antecipado para a Fase 0**
-- [ ] `helmet`, `express-rate-limit` no login, CORS por ambiente (`allowedOrigins` deixa de ser hardcoded)
-- [ ] Paginação/filtros/ordenação em todas as listagens (hoje `getAllTasks` devolve tudo)
-- [ ] **Rotacionar `JWT_SECRET`** e remover segredos do Git (`.env` → `.env.example` + secret no deploy)
-- [ ] Refresh de token / expiração consistente (backend `1h` vs front `JWT_EXPIRES_IN=3h`)
-- [ ] Remover código morto restante: `config/` na raiz e `app/api/test-env.ts` (`routes/other.js` saiu na Fase 1b)
-- [ ] CI (lint + test + lint do spec) — a suíte de testes já existe desde a Fase 0
-- [ ] Dockerfile em multi-stage com `npm ci --omit=dev` na imagem final: hoje o `npm install` do
-  container instala também jest/supertest/mongodb-memory-server, que só servem ao desenvolvimento
-- [ ] Seed reescrito para o modelo novo e reutilizado como fixture de teste
+- [x] `helmet`, `express-rate-limit` em login/registro, CORS por `ALLOWED_ORIGINS`
+- [x] Paginação, filtros e ordenação com allow-list em todas as listagens (Fases 1b/2/4)
+- [x] **Segredos fora do Git e rotacionados**: `.env` destrackeado, `.env.example` como molde,
+  `JWT_SECRET` e senha do Mongo novos
+- [x] **`POST /auth/logout` e `POST /auth/refresh`** — as duas rotas do contrato que faltavam
+- [x] Sessão por cookie httpOnly, com revogação real por `jti` (`models/RevokedToken.js`, índice TTL)
+- [x] Expiração consistente e configurável (`JWT_EXPIRES_IN`, 1h por padrão)
+- [x] Código morto: `config/` na raiz, `routes/other.js` e `app/api/test-env.ts` (no repo do front)
+- [x] Dockerfile em multi-stage com `npm ci --omit=dev` e usuário sem privilégio
+- [x] CI escrito (`.github/workflows/ci.yml`): lint do contrato, testes e build da imagem de produção
+- [x] Seed é o estado inicial para humanos (`npm run seed`); os testes usam fixtures próprias, que é
+  melhor do que depender do seed — mexer no seed não deve quebrar teste
 
-**Aceite:** CI verde; nenhum segredo no histórico novo; `npm test` cobre autorização, recorrência e pontuação.
+**Aceite:** nenhum segredo no histórico novo; a suíte cobre autorização, recorrência, pontuação e o
+ciclo de sessão. **O CI não é verificável daqui** — roda no primeiro push para o GitHub.
+
+**O que a verificação encontrou e vale registrar:**
+
+1. **O `docker compose` não subia.** Os dois serviços referenciavam `env_file` inexistentes, e o
+   Compose falha quando o arquivo não existe. Além disso o front não recebia
+   `NEXT_PUBLIC_API_BASE_URL` — subiria sem saber onde está a API (era o item C2).
+2. **A imagem de produção não conseguia ler o próprio código.** O `COPY` herdava a permissão dos
+   arquivos do host, e 70 arquivos estavam em `600`: o processo subia e morria com `EACCES` ao
+   carregar um módulo. Corrigido dos dois lados — `chmod 644` no repositório e
+   `COPY --chown=node:node` na imagem, para não depender de quem constrói.
+3. **Trocar a senha do Mongo exige recriar o volume.** O Mongo só aplica a senha de root na primeira
+   inicialização; um volume `mongo-data` já criado continua com a senha antiga e o backend para de
+   conectar. Está avisado no `.env.example`.
 
 ---
 

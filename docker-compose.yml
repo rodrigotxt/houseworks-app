@@ -16,6 +16,9 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+      # O Dockerfile tem dois alvos; o compose usa o de desenvolvimento (nodemon +
+      # inspector). Producao e `docker build --target production`.
+      target: development
     container_name: backend-app
     ports:
       - "3001:3000"  # Host:Container

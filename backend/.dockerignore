@@ -1,0 +1,13 @@
+# Sem isto, o "COPY . ." arrastaria o node_modules do host para dentro da imagem —
+# sobrescrevendo o que o npm ci acabou de instalar — e o contexto de build incluiria
+# o binario de ~120MB do mongodb-memory-server.
+node_modules
+coverage
+.env
+.env.*
+!.env.example
+
+.git
+.gitignore
+.history
+*.log

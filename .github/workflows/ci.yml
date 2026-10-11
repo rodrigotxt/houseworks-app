@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  api:
+    name: API e contrato
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Lint do contrato (OpenAPI)
+        run: npx --yes @redocly/cli@latest lint docs/openapi.yaml
+
+      - name: Instalar dependencias
+        working-directory: backend
+        run: npm ci
+
+      # O mongodb-memory-server baixa o mongod na primeira execucao; o cache evita
+      # repetir os ~120MB a cada push.
+      - name: Cache do mongod
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/mongodb-binaries
+          key: mongod-${{ runner.os }}
+
+      - name: Testes
+        working-directory: backend
+        run: npm test
+
+  imagem:
+    name: Imagem de producao
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Construir o alvo de producao e o que pega uma imagem que nao sobe.
+      - name: Build
+        run: docker build --target production -t houseworks-api:ci backend
