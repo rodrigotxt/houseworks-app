@@ -152,3 +152,65 @@ export function completionProgress(occurrences: Pick<TaskOccurrence, 'status'>[]
 
   return { total, done, late, rate: total === 0 ? 0 : done / total };
 }
+
+// ---- membros ----
+
+export type Role = Membership['role'];
+
+/**
+ * O padrao de cada papel — ESPELHO de `utils/capabilities.js` do backend.
+ *
+ * Existe por dois motivos praticos na tela de membros:
+ *
+ *   1. mostrar o que um papel concede ANTES de aplicar;
+ *   2. fazer "trocar o papel" significar "aplicar o padrao deste papel", em vez de deixar
+ *      permissoes antigas grudadas no membro.
+ *
+ * Como o resto deste arquivo: e conveniencia de interface, nao autorizacao. A API
+ * recalcula tudo e continua sendo a unica autoridade.
+ */
+export const ROLE_CAPABILITIES: Record<Role, Record<Capability, boolean>> = {
+  owner: { canAssign: true, canRate: true, canManageTasks: true, canManageMembers: true },
+  adult: { canAssign: true, canRate: true, canManageTasks: true, canManageMembers: false },
+  child: { canAssign: false, canRate: false, canManageTasks: false, canManageMembers: false },
+};
+
+/** Ordem em que as capacidades aparecem na tela: da mais ampla para a mais pontual. */
+export const CAPABILITIES: Capability[] = [
+  'canManageTasks',
+  'canAssign',
+  'canRate',
+  'canManageMembers',
+];
+
+/** Ver o codigo de convite: owner e adult. Rotacionar: so o owner. */
+export function canInvite(membership?: Membership | null): boolean {
+  return membership?.role === 'owner' || membership?.role === 'adult';
+}
+
+export function canRotateInvite(membership?: Membership | null): boolean {
+  return membership?.role === 'owner';
+}
+
+/**
+ * As capacidades efetivas divergem do padrao do papel? Serve para marcar na tela o membro
+ * que recebeu um ajuste manual — a API nao devolve as sobreposicoes, so o resultado delas,
+ * entao esta comparacao e a unica forma de perceber a diferenca.
+ */
+export function hasAdjustedCapabilities(membership?: Membership | null): boolean {
+  if (!membership) return false;
+
+  const padrao = ROLE_CAPABILITIES[membership.role];
+  return CAPABILITIES.some(
+    (capacidade) => membership.capabilities[capacidade] !== padrao[capacidade]
+  );
+}
+
+/**
+ * O usuario e o unico owner? A API recusa rebaixar ou remover o ultimo owner
+ * (LAST_OWNER_CANNOT_LEAVE) — isto evita oferecer um botao que so pode falhar.
+ */
+export function isOnlyOwner(memberships: Membership[], userId?: string): boolean {
+  const owners = memberships.filter((membership) => membership.role === 'owner');
+  return owners.length === 1 && owners[0].user.id === userId;
+}

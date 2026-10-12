@@ -113,8 +113,8 @@ service worker não atrapalhar o desenvolvimento.
 
 ## O que ainda não existe
 
-- Editar e criar tarefas pela interface (a API já suporta; faltam os formulários)
-- Concluir, pular e desfazer pela agenda
-- A tela de Desempenho (o ranking e as estatísticas já chegam da API)
-- Navegação espacial por controle remoto no painel da TV
-- Alternar entre casas (a API suporta várias; a UI assume a primeira)
+- **Navegação espacial por controle remoto** no painel da TV — hoje o foco segue a ordem natural
+  do navegador
+- **Alternar entre casas** — a API suporta várias; a UI assume a primeira
+- **Configurações da casa** — nome, fuso, janela de avaliação e horizonte. O `PATCH /households/{id}`
+  já suporta; a tela de Casa cuida hoje só de membros e convite.

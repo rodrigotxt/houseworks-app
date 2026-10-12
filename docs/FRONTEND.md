@@ -192,6 +192,27 @@ O executor **nunca** aparece na própria fila, e `rating` é obrigatório. A lis
 [DOMAIN.md § 8](./DOMAIN.md) antes de rotular qualquer número na tela — em especial: **o eixo é a
 data de vencimento**, e a semana começa no **domingo**.
 
+### Casa — membros e convite
+
+| Ação | Chamada | Quem pode |
+|---|---|---|
+| Listar moradores | `GET /households/{householdId}/members` | qualquer membro |
+| Ver o código de convite | `GET /households/{householdId}/invite` | `owner` e `adult` |
+| Gerar código novo | `POST /households/{householdId}/invite` | só `owner` |
+| Mudar papel e permissões | `PATCH /households/{householdId}/members/{userId}` | só `owner` |
+| Remover alguém | `DELETE /households/{householdId}/members/{userId}` | `owner` para qualquer um; **qualquer um remove a si mesmo** (sair da casa) |
+
+Três coisas que a tela precisa saber antes de desenhar isso:
+
+1. **`capabilities` vem resolvido; `overrides` não vem.** A API devolve o resultado (papel +
+   exceções), nunca as exceções em si. A tela não tem como saber *o que* foi ajustado à mão —
+   ela só pode comparar o resultado com o padrão do papel e marcar a diferença.
+2. **O `PATCH` de membro apenas MESCLA as capacidades.** Não existe operação para limpar uma
+   exceção. Por isso vale mandar sempre as quatro capacidades junto com o papel: enviar só o
+   papel deixaria uma exceção antiga vencer o papel novo, em silêncio.
+3. **A casa não pode ficar sem `owner`.** Rebaixar ou remover o último responde
+   `LAST_OWNER_CANNOT_LEAVE` — melhor esconder a ação do que oferecer um botão que só pode falhar.
+
 ---
 
 ## 6. Listagens: paginação, filtros e ordenação

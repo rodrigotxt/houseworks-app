@@ -13,6 +13,7 @@ import type {
   Frequency,
   OccurrenceStatus,
 } from './api/types';
+import type { Capability } from './rules';
 
 export const WEEKDAY_LABELS = [
   'domingo',
@@ -65,6 +66,21 @@ export const ROLE_LABELS = {
   adult: 'Adulto',
   child: 'Criança',
 } as const;
+
+/** Apoio de cada papel, para quem esta decidindo qual aplicar. */
+export const ROLE_HINTS: Record<keyof typeof ROLE_LABELS, string> = {
+  owner: 'Administra a casa, os membros e o convite.',
+  adult: 'Cria tarefas, escolhe quem faz e avalia. Não administra membros.',
+  child: 'Executa o que foi designado e acompanha o próprio placar.',
+};
+
+/** O que cada capacidade permite, em uma linha. */
+export const CAPABILITY_LABELS: Record<Capability, string> = {
+  canManageTasks: 'Criar e editar tarefas',
+  canAssign: 'Escolher quem faz cada tarefa',
+  canRate: 'Avaliar o que os outros fizeram',
+  canManageMembers: 'Administrar membros e convites',
+};
 
 /** Uma frase que descreve a regra — usada na lista de tarefas. */
 export function describeRecurrence(recurrence: {

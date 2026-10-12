@@ -5,6 +5,7 @@
 // daqui — mudar uma secao e mudar uma linha, nao tres arquivos.
 
 import BarChartIcon from '@mui/icons-material/BarChart';
+import GroupsIcon from '@mui/icons-material/Groups';
 import TaskAltIcon from '@mui/icons-material/TaskAlt';
 import ViewListIcon from '@mui/icons-material/ViewList';
 
@@ -20,6 +21,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: '/tasks', label: 'Tarefas', shortLabel: 'Tarefas', icon: TaskAltIcon },
   { href: '/schedule', label: 'Cronograma', shortLabel: 'Agenda', icon: ViewListIcon },
   { href: '/performance', label: 'Desempenho', shortLabel: 'Placar', icon: BarChartIcon },
+  { href: '/household', label: 'Casa', shortLabel: 'Casa', icon: GroupsIcon },
 ];
 
 /** Qual item esta ativo para um caminho. Casa por prefixo para /tasks/123 marcar Tarefas. */
