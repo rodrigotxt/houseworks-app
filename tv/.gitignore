@@ -1,0 +1,15 @@
+# Build
+.gradle/
+build/
+local.properties
+
+# Assinatura — NUNCA versionar.
+# Quem tem o keystore pode publicar atualizacao em nome do app; quem nao tem, nao consegue
+# nem reinstalar por cima.
+*.jks
+*.keystore
+keystore.properties
+
+# Saida
+*.apk
+*.aab

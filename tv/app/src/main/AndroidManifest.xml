@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+  xmlns:tools="http://schemas.android.com/tools">
+
+  <uses-permission android:name="android.permission.INTERNET" />
+  <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+  <!--
+    As duas linhas que fazem a Play Store (e o launcher da TV) tratarem isto como app de TV.
+    Sem `touchscreen required=false`, o app e considerado incompativel com TVs e nao aparece
+    para instalacao em nenhuma delas. E o erro mais comum de app de TV.
+  -->
+  <uses-feature android:name="android.software.leanback" android:required="true" />
+  <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
+
+  <application
+    android:label="@string/app_name"
+    android:icon="@mipmap/ic_launcher"
+    android:banner="@drawable/banner"
+    android:theme="@style/TemaPainel"
+    android:allowBackup="false"
+    android:usesCleartextTraffic="false">
+
+    <activity
+      android:name=".MainActivity"
+      android:exported="true"
+      android:screenOrientation="landscape"
+      tools:ignore="DiscouragedApi"
+      android:launchMode="singleTask"
+      android:configChanges="orientation|screenSize|keyboardHidden|screenLayout">
+
+      <!--
+        LEANBACK_LAUNCHER e o que poe o app na fileira da TV. O LAUNCHER comum e mantido para
+        dar para testar no celular ou no emulador — na TV ele nao aparece, e nao atrapalha.
+      -->
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN" />
+        <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+      </intent-filter>
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN" />
+        <category android:name="android.intent.category.LAUNCHER" />
+      </intent-filter>
+    </activity>
+  </application>
+</manifest>

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="app_name">HouseWorks</string>
+  <string name="erro_titulo">Sem conexão com o painel</string>
+  <string name="erro_corpo">Verifique se a TV está na rede e se o servidor está no ar.</string>
+  <string name="tentar_de_novo">Tentar de novo</string>
+</resources>

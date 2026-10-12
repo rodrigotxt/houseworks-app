@@ -7,6 +7,7 @@ Gestão de tarefas domésticas para uma família: a casa divide as tarefas, algu
 |---|---|
 | [`backend/`](./backend) | Node.js 22 · Express · MongoDB · JWT — a API |
 | [`frontend/`](./frontend) | Next.js 15 · React 19 · MUI 7 · PWA instalável — a interface |
+| [`tv/`](./tv) | Android (Kotlin, WebView) — o app da TV, para instalar na televisão |
 | [`docs/`](./docs) | contrato, domínio, decisões, operação e implantação |
 
 > **Um repositório só.** O contrato em [`docs/openapi.yaml`](./docs/openapi.yaml) é a fonte de
@@ -26,6 +27,7 @@ divergirem.
 | Rodar, configurar, testar | [docs/OPERATIONS.md](./docs/OPERATIONS.md) |
 | Colocar no ar (VPS, domínio, TLS, Komodo) | [docs/DEPLOY.md](./docs/DEPLOY.md) |
 | Construir a UI | [docs/FRONTEND.md](./docs/FRONTEND.md) |
+| Instalar o app na TV | [tv/README.md](./tv/README.md) |
 | Ver o histórico e o que falta | [docs/ROADMAP.md](./docs/ROADMAP.md) |
 
 **Se você é uma IA continuando este projeto:** leia `ARCHITECTURE.md` (onde as coisas moram e como
