@@ -243,7 +243,22 @@ paths:
     post:
       tags: [Auth]
       summary: Renovar token
-      description: Emite um novo JWT a partir de uma sessão ainda válida e renova o cookie.
+      description: |
+        Emite um novo JWT e renova o cookie, **rotacionando**: o token apresentado é revogado.
+        Uma sessão renovada não deixa dois tokens válidos circulando.
+
+        É a **única rota que aceita um token já expirado**. Em todas as outras, expirado é
+        sessão encerrada (`TOKEN_EXPIRED`). Aqui, um token expirado há pouco é exatamente o
+        caso a atender — exigir um token válido para renovar tornaria a renovação impossível
+        justamente quando ela é necessária.
+
+        O limite é a **janela de sessão** (`SESSION_MAX_AGE`, 30 dias por padrão): passado
+        esse tempo desde a expiração, a resposta é `TOKEN_EXPIRED` e é preciso entrar de
+        novo. Sem esse teto, um token vazado renovaria para sempre.
+
+        O **cookie** acompanha a sessão, e não o token: ele dura `SESSION_MAX_AGE`, e o
+        token dentro dele continua curto (`JWT_EXPIRES_IN`). Descartar o cookie junto com o
+        token deixaria a renovação sem nada para apresentar.
       operationId: refreshToken
       responses:
         '200':

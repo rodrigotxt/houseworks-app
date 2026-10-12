@@ -12,11 +12,17 @@
 //   2. cookie httpOnly jwt_token     — browser (imune a XSS)
 //   3. header x-auth-token           — legado, mantido por compatibilidade
 
+const config = require('../config');
 const User = require('../models/User');
 const ApiError = require('../utils/apiError');
 const ErrorCode = require('../utils/errorCodes');
 const asyncHandler = require('../utils/asyncHandler');
-const { COOKIE_NAME, verifyToken, isRevoked } = require('../utils/tokens');
+const {
+  COOKIE_NAME,
+  verifyToken,
+  verifyTokenIgnoringExpiry,
+  isRevoked,
+} = require('../utils/tokens');
 
 function extractToken(req) {
   const authorization = req.get('Authorization');
@@ -38,7 +44,11 @@ function extractToken(req) {
   return null;
 }
 
-async function requireAuth(req, res, next) {
+//
+// `tolerarExpiracao` existe para UMA rota — o refresh. Em todo o resto, token expirado e
+// sessao encerrada. No refresh, expirado ha pouco e exatamente o caso a atender.
+async function autenticar(req, opcoes) {
+  const tolerarExpiracao = Boolean(opcoes && opcoes.tolerarExpiracao);
   const token = extractToken(req);
 
   if (!token) {
@@ -47,7 +57,7 @@ async function requireAuth(req, res, next) {
 
   let decoded;
   try {
-    decoded = verifyToken(token);
+    decoded = tolerarExpiracao ? verifyTokenIgnoringExpiry(token) : verifyToken(token);
   } catch (err) {
     if (err.name === 'TokenExpiredError') {
       throw ApiError.unauthenticated(
@@ -56,6 +66,20 @@ async function requireAuth(req, res, next) {
       );
     }
     throw ApiError.unauthenticated('Token invalido.', ErrorCode.TOKEN_INVALID);
+  }
+
+  // Tolerada a expiracao, quem decide se a sessao ainda vale e a JANELA — nao a data do
+  // token. Sem esta checagem, um token vazado ha um ano continuaria renovando para sempre,
+  // porque o refresh nunca recusa por idade.
+  if (tolerarExpiracao && decoded.exp) {
+    const agora = Math.floor(Date.now() / 1000);
+
+    if (agora - decoded.exp > config.sessionMaxAgeSeconds) {
+      throw ApiError.unauthenticated(
+        'Sessao expirada. Faca login novamente.',
+        ErrorCode.TOKEN_EXPIRED
+      );
+    }
   }
 
   // Logout e refresh revogam o token pelo jti. Sem esta checagem, sair nao teria efeito
@@ -95,10 +119,25 @@ async function requireAuth(req, res, next) {
   req.userId = String(user._id);
   // Guardado para logout e refresh revogarem exatamente este token.
   req.token = { raw: token, decoded };
-
-  return next();
 }
 
-module.exports = asyncHandler(requireAuth);
-module.exports.requireAuth = asyncHandler(requireAuth);
+const requireAuth = asyncHandler(async (req, res, next) => {
+  await autenticar(req);
+  next();
+});
+
+/**
+ * Igual ao requireAuth, mas aceita token expirado dentro da janela de sessao.
+ *
+ * SO o refresh usa: e o unico lugar onde "expirado" nao significa "encerrado". Em
+ * qualquer outra rota, expirado e expirado.
+ */
+const requireRenewableAuth = asyncHandler(async (req, res, next) => {
+  await autenticar(req, { tolerarExpiracao: true });
+  next();
+});
+
+module.exports = requireAuth;
+module.exports.requireAuth = requireAuth;
+module.exports.requireRenewableAuth = requireRenewableAuth;
 module.exports.extractToken = extractToken;

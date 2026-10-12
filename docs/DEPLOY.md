@@ -163,7 +163,13 @@ arquivo **fora da VPS** — backup no mesmo disco não protege contra a perda do
 | Backend não conecta no banco | A senha do Mongo só é aplicada na **primeira** inicialização do volume; trocar depois exige `down -v`, que **apaga os dados** |
 | Erro de certificado no Caddy | O DNS ainda não aponta para a VPS, ou a porta 80 está ocupada por outro proxy |
 | `/api/v1/` responde 404 em tudo | No `Caddyfile` a diretiva precisa ser `handle` e não `handle_path` — o prefixo `/api` é preservado de propósito |
-| Sessão cai sozinha a cada hora | Esperado: o token dura 1h e o front renova ao receber `TOKEN_EXPIRED` |
+| Sessão cai sozinha a cada hora | **Não deveria mais acontecer.** O token dura 1h, mas o `middleware.ts` do front renova a sessão antes do render. Se acontecer, o middleware não alcançou a API — confira `API_INTERNAL_URL` no container do front |
+| Sessão cai depois de 30 dias sem usar | Esperado: é a janela de `SESSION_MAX_AGE`. Abrir o app dentro dela renova e o prazo corre de novo |
+
+> **Como a sessão se mantém, em uma frase:** o token dura 1 hora, o cookie dura 30 dias, e o
+> `middleware.ts` troca o token por um novo antes de cada render que precise — sem passar pelo
+> navegador. É o que permite um painel de TV ficar meses ligado sem pedir senha, e o que faz
+> alguém que volta depois de uma semana continuar dentro.
 
 ---
 

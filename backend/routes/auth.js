@@ -3,7 +3,7 @@ const express = require('express');
 const router = express.Router();
 
 const authController = require('../controllers/authController');
-const { requireAuth } = require('../middlewares/auth');
+const { requireAuth, requireRenewableAuth } = require('../middlewares/auth');
 const validate = require('../middlewares/validate');
 const asyncHandler = require('../utils/asyncHandler');
 const { authLimiter } = require('../middlewares/rateLimit');
@@ -55,6 +55,10 @@ router.post('/logout', requireAuth, asyncHandler(authController.logoutUser));
 // @route   POST /auth/refresh
 // @desc    Renovar o token (rotaciona o atual)
 // @access  Privado
-router.post('/refresh', requireAuth, asyncHandler(authController.refreshToken));
+//
+// Usa requireRenewableAuth, e nao requireAuth: e o unico lugar onde um token EXPIRADO
+// ainda serve — desde que dentro da janela de sessao. Com requireAuth, renovar exigia
+// um token valido, o que tornava a renovacao impossivel exatamente quando ela e precisa.
+router.post('/refresh', requireRenewableAuth, asyncHandler(authController.refreshToken));
 
 module.exports = router;

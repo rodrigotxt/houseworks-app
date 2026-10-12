@@ -30,6 +30,18 @@ function verifyToken(token) {
   return jwt.verify(token, config.jwtSecret);
 }
 
+// Verifica a ASSINATURA ignorando a expiracao.
+//
+// Existe por causa do refresh, e so por causa dele: o token que chega la pode estar
+// expirado ha minutos, e esse e exatamente o caso que precisa ser atendido — sem isso,
+// renovar exigiria um token valido, o que torna a renovacao impossivel na pratica.
+//
+// NAO usar sozinha para autorizar nada: quem decide se a sessao ainda vale e a janela
+// de tempo, conferida por quem chama (middlewares/auth.js).
+function verifyTokenIgnoringExpiry(token) {
+  return jwt.verify(token, config.jwtSecret, { ignoreExpiration: true });
+}
+
 // Revoga um token pelo seu jti, ate o instante em que ele expiraria sozinho.
 async function revoke(decoded, reason) {
   if (!decoded || !decoded.jti) {
@@ -68,7 +80,11 @@ function cookieOptions() {
     secure: config.nodeEnv === 'production',
     sameSite: 'lax',
     path: '/',
-    maxAge: config.tokenTtlSeconds * 1000,
+    // O cookie dura a SESSAO, nao o token. E ele que carrega o token de uma visita a
+    // outra: expirado o token, o refresh troca por outro enquanto o cookie ainda estiver
+    // aqui. Amarrar o cookie ao token (1h) era o que fazia a sessao morrer de vez — o
+    // navegador descartava o cookie e nao sobrava nada para renovar.
+    maxAge: config.sessionMaxAgeSeconds * 1000,
   };
 }
 
@@ -84,6 +100,7 @@ module.exports = {
   COOKIE_NAME,
   signToken,
   verifyToken,
+  verifyTokenIgnoringExpiry,
   revoke,
   isRevoked,
   cookieOptions,

@@ -17,6 +17,11 @@ module.exports = {
   jwtSecret: process.env.JWT_SECRET,
   // Validade do token em segundos. Curta de proposito: o refresh existe para renovar.
   tokenTtlSeconds: Number(process.env.JWT_EXPIRES_IN) || 3600,
+  // Quanto tempo a SESSAO dura, em segundos. Sao duas coisas de uma vez:
+  //   - o prazo do COOKIE, que carrega o token de uma visita a outra;
+  //   - a janela em que um token JA EXPIRADO ainda pode ser renovado.
+  // O token continua curto; o que dura e a sessao. Ver utils/tokens.js.
+  sessionMaxAgeSeconds: Number(process.env.SESSION_MAX_AGE) || 30 * 24 * 60 * 60,
   // Origens permitidas no CORS, separadas por virgula. Sem isto, so desenvolvimento.
   allowedOrigins: (process.env.ALLOWED_ORIGINS || '')
     .split(',')
