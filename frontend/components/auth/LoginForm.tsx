@@ -9,6 +9,7 @@ import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Container from '@mui/material/Container';
+import Link from '@mui/material/Link';
 import Paper from '@mui/material/Paper';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
@@ -83,6 +84,10 @@ export default function LoginForm() {
             {enviando ? 'Entrando…' : 'Entrar'}
           </Button>
         </Box>
+
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 3 }}>
+          Ainda não tem conta? <Link href="/register">Criar uma</Link>
+        </Typography>
       </Paper>
     </Container>
   );

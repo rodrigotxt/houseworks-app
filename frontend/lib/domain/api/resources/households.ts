@@ -4,6 +4,7 @@ import type { Transport } from '../client';
 import { unwrap } from '../client';
 import type {
   CreateHouseholdRequest,
+  CreateMemberRequest,
   Envelope,
   Household,
   InviteCode,
@@ -67,6 +68,19 @@ export function householdsResource(transport: Transport) {
     listMembers(householdId: string) {
       return transport
         .request<Envelope<Membership[]>>('/households/' + householdId + '/members')
+        .then(unwrap);
+    },
+
+    /**
+     * Cadastra uma pessoa nova: cria o usuario E a membership numa chamada.
+     * Exige `owner`. E o caminho para quem ainda nao tem conta.
+     */
+    createMember(householdId: string, body: CreateMemberRequest) {
+      return transport
+        .request<Envelope<Membership>>('/households/' + householdId + '/members', {
+          method: 'POST',
+          body,
+        })
         .then(unwrap);
     },
 

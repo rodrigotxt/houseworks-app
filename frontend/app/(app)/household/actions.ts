@@ -28,7 +28,15 @@ import type { MemberActionState } from '@/components/household/memberState';
 
 function toState(causa: unknown): MemberActionState {
   if (isApiError(causa)) {
-    return { status: 'error', message: messageFor(causa.code, causa.message) };
+    // Os campos do formulario usam o MESMO nome do contrato, entao o mapa se monta sozinho.
+    const fieldErrors: Record<string, string> = {};
+    for (const problema of causa.details) fieldErrors[problema.field] = problema.issue;
+
+    return {
+      status: 'error',
+      message: messageFor(causa.code, causa.message),
+      fieldErrors: Object.keys(fieldErrors).length > 0 ? fieldErrors : undefined,
+    };
   }
 
   return { status: 'error', message: 'Nao conseguimos falar com o servidor.' };
@@ -47,6 +55,34 @@ export async function saveMember(
       role,
       capabilities,
     });
+  } catch (causa) {
+    return toState(causa);
+  }
+
+  revalidatePath('/household');
+  return { status: 'ok' };
+}
+
+export interface NovoMembro {
+  name: string;
+  username: string;
+  email: string;
+  password: string;
+  role: Role;
+}
+
+/**
+ * Cadastra uma pessoa nova na casa: cria o usuario E a membership numa chamada.
+ * Exige owner. E o caminho para quem ainda nao tem conta.
+ *
+ * A senha vem daqui e e escolhida por quem cadastra. Quem foi cadastrado deve troca-la
+ * em "Trocar senha" -- ate entao, quem cadastrou conhece a senha dela.
+ */
+export async function createMember(dados: NovoMembro): Promise<MemberActionState> {
+  const { householdId } = await requireContext();
+
+  try {
+    await (await serverApi()).households.createMember(householdId, dados);
   } catch (causa) {
     return toState(causa);
   }

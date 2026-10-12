@@ -89,8 +89,9 @@ tentando.
 
 ## 4. O primeiro usuário
 
-**Não existe tela de cadastro no app.** O primeiro acesso é criado pela API — é o único passo
-que foge da interface, e existe porque um app de família não precisa de cadastro público:
+A primeira conta pode ser criada pela tela de cadastro (`/register`), mas ela **nasce sem
+casa** — e alguém precisa criar a casa. Por isso, para a primeira conta do servidor, o
+caminho mais curto continua sendo a API, criando usuário e casa na mesma chamada:
 
 ```bash
 curl -X POST https://SEU-DOMINIO/api/v1/auth/register \
@@ -107,9 +108,17 @@ curl -X POST https://SEU-DOMINIO/api/v1/auth/register \
 Isso cria **o usuário e a casa na mesma chamada**, e você entra como `owner`. A senha precisa
 ter **8 caracteres ou mais** — o contrato recusa menos.
 
-Depois disso todo mundo entra pela interface: quem é convidado usa o **código de convite**, que
-aparece em *Tarefas → conta* (rota `GET /households/{id}/invite`, visível para `owner` e
-`adult`).
+**Para as demais pessoas, tudo acontece pela interface**, e há dois caminhos:
+
+| Quem | Como |
+|---|---|
+| Já vai se virar sozinho | a pessoa cria a conta em `/register` e entra em **Casa** com o **código de convite** |
+| Criança, ou quem não vai fazer isso sozinho | quem é `owner` cadastra em **Casa → Cadastrar pessoa**, escolhendo a senha provisória |
+
+O código de convite aparece em *Casa* (rota `GET /households/{id}/invite`, visível para
+`owner` e `adult`). No segundo caminho, avise a pessoa para trocar a senha em
+**Trocar senha** (menu da conta): enquanto ela não trocar, você conhece a senha dela — e a
+troca derruba as outras sessões abertas.
 ---
 
 ## 5. Operação no dia a dia

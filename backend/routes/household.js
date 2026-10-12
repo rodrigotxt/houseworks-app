@@ -18,6 +18,7 @@ const {
   updateHouseholdSchema,
   joinHouseholdSchema,
   updateMemberSchema,
+  createMemberSchema,
 } = require('../schemas/household');
 
 // @route   POST /households/join
@@ -65,6 +66,18 @@ router.get(
   requireAuth,
   requireMember,
   asyncHandler(householdController.listMembers)
+);
+
+// @route   POST /households/:householdId/members
+// @desc    Cadastrar uma pessoa nova na casa (cria usuario e membership)
+// @access  Owner
+router.post(
+  '/:householdId/members',
+  requireAuth,
+  requireMember,
+  requireRole('owner'),
+  validate({ body: createMemberSchema }),
+  asyncHandler(householdController.createMember)
 );
 
 // @route   PATCH /households/:householdId/members/:userId

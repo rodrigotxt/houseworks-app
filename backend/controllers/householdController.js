@@ -3,6 +3,7 @@
 // As rotas de :householdId chegam aqui ja com req.household e req.membership resolvidos
 // pelos middlewares de membership — o controller nao repete checagem de acesso.
 
+const User = require('../models/User');
 const Household = require('../models/Household');
 const Membership = require('../models/Membership');
 const Task = require('../models/Task');
@@ -180,6 +181,67 @@ exports.listMembers = async (req, res) => {
     .sort({ joinedAt: 1 });
 
   return ok(res, memberships);
+};
+
+// @desc    Cadastrar uma pessoa nova na casa (usuario + membership)
+// @route   POST /api/v1/households/:householdId/members
+// @access  Owner
+// E o caminho para quem ainda nao tem conta. Diferente de POST /auth/register, aqui nao
+// se cria casa nenhuma — a pessoa entra direto nesta.
+exports.createMember = async (req, res) => {
+  const { name, username, email, password, role } = req.body;
+
+  const emailTaken = await User.findOne({ email });
+  if (emailTaken) {
+    throw ApiError.conflict('Este email ja esta registrado.', ErrorCode.EMAIL_ALREADY_REGISTERED);
+  }
+
+  const usernameTaken = await User.findOne({ username });
+  if (usernameTaken) {
+    throw ApiError.conflict(
+      'Este nome de usuario ja esta registrado.',
+      ErrorCode.USERNAME_ALREADY_REGISTERED
+    );
+  }
+
+  // A senha e criptografada pelo pre-save do modelo.
+  let user;
+  try {
+    user = await new User({ name, username, email, password }).save();
+  } catch (error) {
+    // A checagem acima e um aviso, nao uma garantia: duas chamadas simultaneas podem passar
+    // as duas por ela e so o indice unico do banco decide. Sem isto, a corrida viraria um
+    // 500 em vez do 409 que o contrato promete.
+    if (error.code === 11000) {
+      const campo = error.keyPattern && error.keyPattern.email ? 'email' : 'usuario';
+      throw ApiError.conflict(
+        'Este ' + campo + ' ja esta registrado.',
+        campo === 'email'
+          ? ErrorCode.EMAIL_ALREADY_REGISTERED
+          : ErrorCode.USERNAME_ALREADY_REGISTERED
+      );
+    }
+    throw error;
+  }
+
+  let membership;
+  try {
+    membership = await new Membership({
+      user: user._id,
+      household: req.household._id,
+      // Sem papel informado, a pessoa entra como child — o papel de menor privilegio.
+      role: role || 'child',
+    }).save();
+  } catch (error) {
+    // Nao ha transacao (o MongoDB em memoria dos testes roda sem replica set), entao a
+    // compensacao e manual. Sem ela, a falha deixaria um usuario orfao segurando o email.
+    await User.deleteOne({ _id: user._id });
+    throw error;
+  }
+
+  await membership.populate('user', 'name username');
+
+  return created(res, membership);
 };
 
 // @desc    Alterar papel ou capacidades de um membro

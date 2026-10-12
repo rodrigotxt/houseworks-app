@@ -12,6 +12,7 @@ import Container from '@mui/material/Container';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 
+import CreateMemberCard from '@/components/household/CreateMemberCard';
 import InviteCard from '@/components/household/InviteCard';
 import MemberCard from '@/components/household/MemberCard';
 import PageHeader from '@/components/ui/PageHeader';
@@ -57,6 +58,8 @@ export default async function HouseholdPage() {
             canRotate={canRotateInvite(membership)}
           />
         )}
+
+        {gerencia && <CreateMemberCard />}
 
         <Typography variant="h6" component="h2" gutterBottom>
           Moradores

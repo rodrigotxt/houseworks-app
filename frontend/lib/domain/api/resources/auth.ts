@@ -2,7 +2,14 @@
 
 import type { Transport } from '../client';
 import { unwrap } from '../client';
-import type { Envelope, LoginRequest, Membership, RegisterRequest, User } from '../types';
+import type {
+  ChangePasswordRequest,
+  Envelope,
+  LoginRequest,
+  Membership,
+  RegisterRequest,
+  User,
+} from '../types';
 
 export interface Session {
   user: User;
@@ -39,6 +46,22 @@ export function authResource(transport: Transport) {
     refresh() {
       return transport
         .request<Envelope<{ token: string; expiresIn: number }>>('/auth/refresh', { method: 'POST' })
+        .then(unwrap);
+    },
+
+    /**
+     * Troca a propria senha. Exige a senha atual, e derruba todas as outras sessoes.
+     *
+     * Devolve um token novo: o que fez a chamada tambem e anterior a troca e acabou de
+     * perder validade. Por isso esta chamada vive no BROWSER, como o login — quem grava
+     * o cookie novo e a propria API, na resposta.
+     */
+    changePassword(body: ChangePasswordRequest) {
+      return transport
+        .request<Envelope<{ token: string; expiresIn: number }>>('/auth/password', {
+          method: 'PATCH',
+          body,
+        })
         .then(unwrap);
     },
 

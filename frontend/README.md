@@ -22,10 +22,11 @@ o chrome em volta. Isso é possível porque os quatro alvos não são igualmente
 
 ```
 app/
-  (auth)/login/       pública
+  (auth)/login/       pública — entrar
+  (auth)/register/    pública — criar conta (nasce SEM casa, de propósito)
   (app)/              autenticadas — layout resolve a casa e monta o shell
   (tv)/…              (o painel hoje vive em (app)/panel)
-  onboarding/         quem ainda não tem casa
+  onboarding/         quem ainda não tem casa: criar a sua ou entrar por código
 components/
   shells/             o chrome: navegação lateral, inferior e da TV
   ui/                 primitivos e o tema

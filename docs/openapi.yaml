@@ -266,6 +266,46 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthenticated'
 
+  /auth/password:
+    patch:
+      tags: [Auth]
+      summary: Trocar a própria senha
+      description: |
+        Exige a senha atual em uso. Em caso de sucesso, **todas as outras sessões caem** e um
+        token novo é emitido para quem trocou.
+
+        A queda das outras sessões é o ponto: uma troca de senha que não derruba o que já estava
+        autenticado não protege nada — quem tinha acesso continua tendo. Por isso o modelo do
+        usuário guarda o instante da troca e qualquer token emitido antes dele deixa de valer.
+      operationId: changePassword
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordRequest'
+      responses:
+        '200':
+          description: Senha trocada e sessão renovada.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [token, expiresIn]
+                    properties:
+                      token:
+                        type: string
+                      expiresIn:
+                        type: integer
+                        example: 3600
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
   /auth/me:
     get:
       tags: [Auth]
@@ -533,6 +573,47 @@ paths:
         '403':
           $ref: '#/components/responses/NotMember'
 
+    post:
+      tags: [Households]
+      summary: Cadastrar uma pessoa nova na casa
+      description: |
+        Exige `owner`. Cria o usuário **e** a membership na mesma chamada — é o caminho para
+        trazer alguém que ainda não tem conta, sem exigir que a pessoa se cadastre sozinha.
+
+        A senha é escolhida por quem cadastra e **precisa ser trocada pela pessoa** depois
+        (`PATCH /auth/password`). Enquanto isso não acontece, quem cadastrou conhece a senha
+        dela — e, num app em que um membro avalia o trabalho do outro, isso esvazia a avaliação.
+
+        Diferente de `POST /auth/register`, aqui **não** se cria casa nenhuma: a pessoa entra
+        direto na casa de quem chamou.
+      operationId: createMember
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateMemberRequest'
+      responses:
+        '201':
+          description: Pessoa cadastrada e já membro da casa.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Membership'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/InsufficientRole'
+        '409':
+          description: E-mail ou nome de usuário já registrado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /households/{householdId}/members/{userId}:
     parameters:
       - $ref: '#/components/parameters/HouseholdId'
@@ -2439,6 +2520,54 @@ components:
             canManageMembers:
               type: boolean
 
+    CreateMemberRequest:
+      type: object
+      required: [name, username, email, password]
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 80
+          example: Arthur Soares Martins
+        username:
+          type: string
+          minLength: 3
+          maxLength: 30
+          pattern: '^[a-zA-Z0-9._-]+$'
+          example: arthur
+        email:
+          type: string
+          format: email
+          example: arthur@rodrigo.inf.br
+        password:
+          type: string
+          minLength: 8
+          maxLength: 72
+          format: password
+          description: Escolhida por quem cadastra. A pessoa deve trocá-la em `PATCH /auth/password`.
+        role:
+          type: string
+          enum: [owner, adult, child]
+          description: |
+            Papel inicial na casa. Omitido, o servidor usa `child`.
+
+            De propósito **sem** `default:` aqui: em corpo de requisição, declarar o default faz o
+            gerador de tipos tratar o campo como obrigatório.
+
+    ChangePasswordRequest:
+      type: object
+      required: [currentPassword, newPassword]
+      properties:
+        currentPassword:
+          type: string
+          format: password
+          description: A senha em uso. Errada, a resposta é `INVALID_CREDENTIALS` (401).
+        newPassword:
+          type: string
+          minLength: 8
+          maxLength: 72
+          format: password
+          description: Mesma regra do cadastro — 8 a 72 caracteres (o teto é o limite do bcrypt).
     CreateTaskRequest:
       type: object
       required: [name, recurrence, difficulty]

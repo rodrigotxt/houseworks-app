@@ -2,6 +2,7 @@
 // Entrada das rotas de casa, convite e membros (docs/openapi.yaml).
 
 const { z } = require('zod');
+const { email, personName, username, password } = require('./common');
 
 const name = z
   .string()
@@ -73,9 +74,24 @@ const updateMemberSchema = z
     message: 'Informe papel ou capacidades.',
   });
 
+// Cadastro de uma pessoa nova feito pelo dono da casa: cria o usuario E a membership
+// numa chamada so. Nao cria casa nenhuma (diferente de POST /auth/register).
+const createMemberSchema = z.strictObject({
+  name: personName,
+  username,
+  email,
+  password,
+  // Sem valor padrao AQUI: quem decide o padrao (child) e o controller, para o contrato
+  // nao passar a exigir o campo.
+  role: z.enum(['owner', 'adult', 'child'], {
+    message: 'O papel deve ser owner, adult ou child.',
+  }).optional(),
+});
+
 module.exports = {
   createHouseholdSchema,
   updateHouseholdSchema,
   joinHouseholdSchema,
   updateMemberSchema,
+  createMemberSchema,
 };

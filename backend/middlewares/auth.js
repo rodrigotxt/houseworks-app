@@ -74,6 +74,23 @@ async function requireAuth(req, res, next) {
     throw ApiError.unauthenticated('Token invalido.', ErrorCode.TOKEN_INVALID);
   }
 
+  // Troca de senha derruba tudo que veio antes dela. Sem isto, mudar a senha nao expulsaria
+  // ninguem — que e exatamente o motivo pelo qual se troca uma senha.
+  //
+  // Compara em SEGUNDOS porque o `iat` do JWT so tem precisao de segundo: o token emitido
+  // no mesmo segundo da troca e tratado como novo. Isso abre uma janela de 1s — o minimo
+  // que da para abrir sem recusar o proprio token que a troca acabou de emitir.
+  if (user.passwordChangedAt) {
+    const trocadaEm = Math.floor(user.passwordChangedAt.getTime() / 1000);
+
+    if (decoded.iat && decoded.iat < trocadaEm) {
+      throw ApiError.unauthenticated(
+        'Sua senha foi alterada. Entre novamente.',
+        ErrorCode.TOKEN_INVALID
+      );
+    }
+  }
+
   req.user = user;
   req.userId = String(user._id);
   // Guardado para logout e refresh revogarem exatamente este token.

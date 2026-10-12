@@ -3,27 +3,15 @@
 // householdName/timezone criam a casa no proprio cadastro (modelo Household, Fase 1).
 
 const { z } = require('zod');
-const { email } = require('./common');
+// Nome, usuario e senha vem de common.js: o cadastro publico e o cadastro feito pelo dono
+// da casa criam a mesma entidade, e as regras nao podem divergir entre os dois caminhos.
+const { email, personName, username, password } = require('./common');
 
 const registerSchema = z.strictObject({
-  name: z
-    .string()
-    .trim()
-    .min(2, { message: 'Nome deve ter no minimo 2 caracteres.' })
-    .max(80, { message: 'Nome deve ter no maximo 80 caracteres.' }),
-  username: z
-    .string()
-    .trim()
-    .min(3, { message: 'Nome de usuario deve ter no minimo 3 caracteres.' })
-    .max(30, { message: 'Nome de usuario deve ter no maximo 30 caracteres.' })
-    .regex(/^[a-zA-Z0-9._-]+$/, {
-      message: 'Nome de usuario aceita apenas letras, numeros, ponto, hifen e underline.',
-    }),
+  name: personName,
+  username,
   email,
-  password: z
-    .string()
-    .min(8, { message: 'Senha deve ter no minimo 8 caracteres.' })
-    .max(72, { message: 'Senha deve ter no maximo 72 caracteres.' }),
+  password,
 
   // Com householdName, o cadastro cria a casa e torna o usuario owner dela.
   householdName: z
@@ -48,4 +36,13 @@ const loginSchema = z
     path: ['email'],
   });
 
-module.exports = { registerSchema, loginSchema };
+// Troca de senha pelo proprio dono da conta.
+//
+// A senha ATUAL e exigida mesmo com a sessao ja autenticada: sem isso, um token roubado
+// (ou um computador deixado aberto) bastaria para trancar o dono fora da propria conta.
+const changePasswordSchema = z.strictObject({
+  currentPassword: z.string().min(1, { message: 'Informe a senha atual.' }),
+  newPassword: password,
+});
+
+module.exports = { registerSchema, loginSchema, changePasswordSchema };

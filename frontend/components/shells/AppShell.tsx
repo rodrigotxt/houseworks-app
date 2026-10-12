@@ -34,9 +34,11 @@ import Toolbar from '@mui/material/Toolbar';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 
+import LockResetIcon from '@mui/icons-material/LockReset';
 import LogoutIcon from '@mui/icons-material/Logout';
 import TvIcon from '@mui/icons-material/Tv';
 
+import ChangePasswordDialog from '@/components/auth/ChangePasswordDialog';
 import type { DeviceKind } from '@/lib/device/profile';
 import { getBrowserApi } from '@/lib/session/browser';
 import { NAV_ITEMS, activeItem } from './nav';
@@ -66,6 +68,7 @@ export default function AppShell({
 
   const [menu, setMenu] = useState<HTMLElement | null>(null);
   const [saindo, setSaindo] = useState(false);
+  const [trocandoSenha, setTrocandoSenha] = useState(false);
 
   async function sair() {
     setSaindo(true);
@@ -128,11 +131,25 @@ export default function AppShell({
               </Box>
             </MenuItem>
             <Divider />
+            <MenuItem
+              onClick={() => {
+                setMenu(null);
+                setTrocandoSenha(true);
+              }}
+            >
+              <ListItemIcon><LockResetIcon fontSize="small" /></ListItemIcon>
+              <ListItemText>Trocar senha</ListItemText>
+            </MenuItem>
             <MenuItem onClick={sair} disabled={saindo}>
               <ListItemIcon><LogoutIcon fontSize="small" /></ListItemIcon>
               <ListItemText>{saindo ? 'Saindo…' : 'Sair'}</ListItemText>
             </MenuItem>
           </Menu>
+
+          <ChangePasswordDialog
+            open={trocandoSenha}
+            onClose={() => setTrocandoSenha(false)}
+          />
         </Toolbar>
       </AppBar>
 

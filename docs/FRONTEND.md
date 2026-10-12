@@ -27,10 +27,21 @@ O backend também aceita `Authorization: Bearer <jwt>` (clientes não-browser) e
 ### Fluxo completo
 
 ```
+POST /auth/register       { name, username, email, password [, householdName] }
+  → 201 { data: { user[, household] } }
+  → 409 EMAIL_ALREADY_REGISTERED | USERNAME_ALREADY_REGISTERED
+  SEM householdName, cria a conta e MAIS NADA — a casa vem depois (convite ou criação).
+
 POST /auth/login          { email | username, password }
   → 200 { data: { token, expiresIn, user } }   + Set-Cookie: jwt_token (httpOnly)
   → 401 INVALID_CREDENTIALS
   → 429 RATE_LIMITED
+
+PATCH /auth/password      { currentPassword, newPassword }
+  → 200 { data: { token, expiresIn } }   + Set-Cookie novo
+  → 401 INVALID_CREDENTIALS   (senha atual errada)
+  DERRUBA todas as outras sessões: qualquer token emitido antes da troca deixa de valer.
+  Por isso devolve um token novo — o que fez a chamada também acabou de expirar.
 
 GET  /auth/me
   → 200 { data: { user, memberships: [{ id, householdId, role, capabilities }] } }
@@ -133,6 +144,25 @@ desabilitar** botões. O backend continua validando — a UI só evita frustraç
 ---
 
 ## 5. As telas e seus endpoints
+
+### Entrar na casa — os dois caminhos
+
+| Caminho | Para quem | Como |
+|---|---|---|
+| **Cadastro + código** | a pessoa tem como se cadastrar sozinha | `POST /auth/register` **sem** `householdName` → a conta nasce sem casa → `POST /households/join` com o código |
+| **O dono cadastra** | criança, ou quem não vai fazer isso sozinho | `POST /households/{householdId}/members` — cria usuário **e** membership numa chamada (exige `owner`) |
+
+Os dois coexistem e resolvem casos diferentes; o código de convite **não** foi substituído,
+porque continua sendo o único caminho para quem já tem conta em outra casa.
+
+**A senha é o ponto sensível do segundo caminho.** Quem cadastra escolhe a senha e precisa
+entregá-la — e, enquanto a pessoa não trocar, quem cadastrou continua sabendo. Num app em que
+um membro avalia o trabalho do outro, isso esvazia a avaliação: por isso `PATCH /auth/password`
+(troca de senha) existe junto, e a tela de Casa diz isso em texto.
+
+> **A troca de senha vem do browser, não de Server Action** — como o login. Quem grava o
+> cookie novo é a própria API, na resposta; numa Server Action o `Set-Cookie` não chegaria ao
+> navegador e a sessão antiga (já inválida) ficaria no lugar.
 
 ### Tarefas — "o que precisa ser feito na casa"
 

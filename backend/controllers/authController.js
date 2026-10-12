@@ -137,6 +137,35 @@ exports.refreshToken = async (req, res) => {
   return ok(res, { token, expiresIn: TOKEN_TTL_SECONDS });
 };
 
+// @desc    Trocar a propria senha
+// @route   PATCH /api/v1/auth/password
+// @access  Privado
+// A senha atual e exigida mesmo com a sessao ja autenticada: sem isso, um token roubado
+// bastaria para trancar o dono fora da propria conta.
+exports.changePassword = async (req, res) => {
+  const { currentPassword, newPassword } = req.body;
+
+  const confere = await req.user.matchPassword(currentPassword);
+
+  if (!confere) {
+    // Mesmo codigo do login errado, de proposito: nao ha o que distinguir aqui.
+    throw ApiError.unauthenticated('Senha atual incorreta.', ErrorCode.INVALID_CREDENTIALS);
+  }
+
+  req.user.password = newPassword;
+  // O pre-save do modelo criptografa. O instante fica gravado para o middleware de
+  // autenticacao derrubar toda sessao emitida antes desta linha.
+  req.user.passwordChangedAt = new Date();
+  await req.user.save();
+
+  // O token que fez esta chamada tambem e anterior a troca — acabou de perder validade.
+  // Emitir um novo evita expulsar quem acabou de trocar a propria senha.
+  const { token } = signToken(req.user);
+  setAuthCookie(res, token);
+
+  return ok(res, { token, expiresIn: TOKEN_TTL_SECONDS });
+};
+
 // @desc    Usuario autenticado e suas memberships
 // @route   GET /api/v1/auth/me
 // @access  Privado

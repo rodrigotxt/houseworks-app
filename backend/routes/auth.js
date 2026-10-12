@@ -7,7 +7,7 @@ const { requireAuth } = require('../middlewares/auth');
 const validate = require('../middlewares/validate');
 const asyncHandler = require('../utils/asyncHandler');
 const { authLimiter } = require('../middlewares/rateLimit');
-const { registerSchema, loginSchema } = require('../schemas/auth');
+const { registerSchema, loginSchema, changePasswordSchema } = require('../schemas/auth');
 
 // @route   POST /auth/register
 // @desc    Registrar usuario (opcionalmente criando a casa)
@@ -27,6 +27,19 @@ router.post(
   authLimiter,
   validate({ body: loginSchema }),
   asyncHandler(authController.loginUser)
+);
+
+// @route   PATCH /auth/password
+// @desc    Trocar a propria senha (derruba as outras sessoes)
+// @access  Privado
+// Passa pelo authLimiter porque a senha ATUAL e verificada aqui: sem limite, esta rota vira
+// um lugar para adivinhar a senha de quem deixou a sessao aberta.
+router.patch(
+  '/password',
+  requireAuth,
+  authLimiter,
+  validate({ body: changePasswordSchema }),
+  asyncHandler(authController.changePassword)
 );
 
 // @route   GET /auth/me

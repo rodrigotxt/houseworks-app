@@ -7,6 +7,8 @@
 export interface MemberActionState {
   status: 'idle' | 'ok' | 'error';
   message?: string;
+  /** Campo -> problema, com o mesmo nome do campo no formulario. */
+  fieldErrors?: Record<string, string>;
 }
 
 export const EMPTY_MEMBER_ACTION: MemberActionState = { status: 'idle' };

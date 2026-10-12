@@ -108,6 +108,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Trocar a própria senha
+         * @description Exige a senha atual em uso. Em caso de sucesso, **todas as outras sessões caem** e um
+         *     token novo é emitido para quem trocou.
+         *
+         *     A queda das outras sessões é o ponto: uma troca de senha que não derruba o que já estava
+         *     autenticado não protege nada — quem tinha acesso continua tendo. Por isso o modelo do
+         *     usuário guarda o instante da troca e qualquer token emitido antes dele deixa de valer.
+         */
+        patch: operations["changePassword"];
+        trace?: never;
+    };
     "/auth/me": {
         parameters: {
             query?: never;
@@ -244,7 +269,19 @@ export interface paths {
          */
         get: operations["listMembers"];
         put?: never;
-        post?: never;
+        /**
+         * Cadastrar uma pessoa nova na casa
+         * @description Exige `owner`. Cria o usuário **e** a membership na mesma chamada — é o caminho para
+         *     trazer alguém que ainda não tem conta, sem exigir que a pessoa se cadastre sozinha.
+         *
+         *     A senha é escolhida por quem cadastra e **precisa ser trocada pela pessoa** depois
+         *     (`PATCH /auth/password`). Enquanto isso não acontece, quem cadastrou conhece a senha
+         *     dela — e, num app em que um membro avalia o trabalho do outro, isso esvazia a avaliação.
+         *
+         *     Diferente de `POST /auth/register`, aqui **não** se cria casa nenhuma: a pessoa entra
+         *     direto na casa de quem chamou.
+         */
+        post: operations["createMember"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1213,6 +1250,42 @@ export interface components {
                 canManageMembers?: boolean;
             };
         };
+        CreateMemberRequest: {
+            /** @example Arthur Soares Martins */
+            name: string;
+            /** @example arthur */
+            username: string;
+            /**
+             * Format: email
+             * @example arthur@rodrigo.inf.br
+             */
+            email: string;
+            /**
+             * Format: password
+             * @description Escolhida por quem cadastra. A pessoa deve trocá-la em `PATCH /auth/password`.
+             */
+            password: string;
+            /**
+             * @description Papel inicial na casa. Omitido, o servidor usa `child`.
+             *
+             *     De propósito **sem** `default:` aqui: em corpo de requisição, declarar o default faz o
+             *     gerador de tipos tratar o campo como obrigatório.
+             * @enum {string}
+             */
+            role?: "owner" | "adult" | "child";
+        };
+        ChangePasswordRequest: {
+            /**
+             * Format: password
+             * @description A senha em uso. Errada, a resposta é `INVALID_CREDENTIALS` (401).
+             */
+            currentPassword: string;
+            /**
+             * Format: password
+             * @description Mesma regra do cadastro — 8 a 72 caracteres (o teto é o limite do bcrypt).
+             */
+            newPassword: string;
+        };
         CreateTaskRequest: {
             /** @example Lavar louça */
             name: string;
@@ -1558,6 +1631,38 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
         };
     };
+    changePassword: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangePasswordRequest"];
+            };
+        };
+        responses: {
+            /** @description Senha trocada e sessão renovada. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            token: string;
+                            /** @example 3600 */
+                            expiresIn: number;
+                        };
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+        };
+    };
     getCurrentUser: {
         parameters: {
             query?: never;
@@ -1843,6 +1948,46 @@ export interface operations {
                 };
             };
             403: components["responses"]["NotMember"];
+        };
+    };
+    createMember: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identificador da casa. */
+                householdId: components["parameters"]["HouseholdId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateMemberRequest"];
+            };
+        };
+        responses: {
+            /** @description Pessoa cadastrada e já membro da casa. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["Membership"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["InsufficientRole"];
+            /** @description E-mail ou nome de usuário já registrado. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     removeMember: {

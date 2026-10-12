@@ -27,7 +27,17 @@ const UserSchema = new mongoose.Schema({
   createdAt: {
     type: Date,
     default: Date.now,
-  }
+  },
+  // Instante da ultima troca de senha. Serve para derrubar as sessoes que ja existiam:
+  // qualquer token emitido ANTES deste instante deixa de valer (ver middlewares/auth.js).
+  //
+  // Nao existe revogacao em massa por jti — a lista de revogados guarda um identificador
+  // por token, e nao ha como listar os de um usuario. Comparar com o `iat` do token resolve
+  // o mesmo problema sem manter estado por sessao.
+  passwordChangedAt: {
+    type: Date,
+    default: null,
+  },
 }, {
   timestamps: true, // Adiciona automaticamente `createdAt` e `updatedAt`
   // toObject E toJSON: documentos populados usam o toObject do schema filho.
