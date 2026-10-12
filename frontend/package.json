@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "next lint",
     "gen:api": "node scripts/generate-api-types.mjs",
-    "gen:icons": "node scripts/generate-icons.mjs"
+    "gen:icons": "node scripts/generate-icons.mjs",
+    "test:spatial": "node --test lib/device/spatial.test.ts"
   },
   "dependencies": {
     "@emotion/cache": "^11.14.0",

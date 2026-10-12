@@ -15,6 +15,29 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
+/* Anel de foco do modo TV.
+
+   Na TV não existe mouse nem hover: o foco É a interface. Por isso duas diferenças em
+   relação ao anel do tema:
+
+   1. vale para `:focus`, e não só `:focus-visible`. O foco aqui é movido por JavaScript
+      (lib/device/useSpatialNavigation.ts), e a heurística do navegador não garante que
+      um `focus()` programático conte como "visível" — o usuário ficaria sem saber onde
+      está. Sem mouse, não há risco de anel aparecendo em quem só clicou;
+   2. é mais grosso e colorido pelo tema, porque se lê a três metros de distância — e a
+      cor vem de `--mui-palette-primary-main`, que já muda sozinha entre claro e escuro.
+
+   O atributo `data-tv` fica no <html>, marcado pelo layout raiz. Não é capricho: o anel
+   do tema chega como uma classe do Emotion (`.mui-xxx:focus-visible`), que tem a MESMA
+   especificidade de `[data-tv] :focus` — e aí decide a ordem de injeção, não a intenção.
+   Ancorado no `html`, este seletor ganha por especificidade, sem `!important`. */
+html[data-tv] :focus,
+html[data-tv] :focus-visible {
+  outline: 4px solid var(--mui-palette-primary-main);
+  outline-offset: 3px;
+  border-radius: 10px;
+}
+
 /* Respeita quem pediu menos animação no sistema — vale também para o painel da TV. */
 @media (prefers-reduced-motion: reduce) {
   *,

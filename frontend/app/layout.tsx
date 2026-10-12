@@ -3,11 +3,13 @@
 // navegação é o layout de cada grupo de rotas, porque ela muda por dispositivo.
 
 import type { Metadata, Viewport } from 'next';
+import { headers } from 'next/headers';
 
 import InitColorSchemeScript from '@mui/material/InitColorSchemeScript';
 
 import ServiceWorkerRegistrar from '@/components/pwa/ServiceWorkerRegistrar';
 import Providers from '@/components/ui/Providers';
+import { deviceFromUserAgent } from '@/lib/device/profile';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -30,11 +32,18 @@ export const viewport: Viewport = {
   ],
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // O modo TV mora no <html>, e não no shell, por um motivo de CSS: o anel de foco da TV
+  // precisa vencer o anel do tema, que é injetado pelo Emotion como uma classe com a
+  // MESMA especificidade — e aí quem vence é a ordem de injeção, não a intenção. Ancorado
+  // no <html>, o seletor de globals.css ganha por especificidade, sem precisar de
+  // !important. De quebra, o atributo já vem do servidor, sem depender de JavaScript.
+  const emTv = deviceFromUserAgent((await headers()).get('user-agent')) === 'tv';
+
   return (
     // suppressHydrationWarning: o script abaixo escreve o atributo de tema no <html> antes
-    // de o React hidratar, e sem isto o React reclamaria da diferença.
-    <html lang="pt-BR" suppressHydrationWarning>
+    // de o React hidratar, e sem isso o React reclamaria da diferença.
+    <html lang="pt-BR" data-tv={emTv ? 'true' : undefined} suppressHydrationWarning>
       <body>
         {/*
           Roda ANTES da primeira pintura e escreve o tema escolhido no <html>.

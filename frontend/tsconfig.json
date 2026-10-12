@@ -8,6 +8,10 @@
     "strict": false,
     "forceConsistentCasingInFileNames": true,
     "noEmit": true,
+    // O runner de teste do Node (npm run test:spatial) exige o caminho COM extensão,
+    // porque não faz resolução de módulo: quem importa `./spatial.ts` escreve isso mesmo.
+    // É o preço de rodar os testes sem Jest nem ts-node. Só é permitido com noEmit.
+    "allowImportingTsExtensions": true,
     "esModuleInterop": true,
     "module": "esnext",
     "moduleResolution": "bundler",

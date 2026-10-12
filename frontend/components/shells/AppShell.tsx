@@ -40,6 +40,7 @@ import TvIcon from '@mui/icons-material/Tv';
 
 import ChangePasswordDialog from '@/components/auth/ChangePasswordDialog';
 import type { DeviceKind } from '@/lib/device/profile';
+import { useSpatialNavigation } from '@/lib/device/useSpatialNavigation';
 import { getBrowserApi } from '@/lib/session/browser';
 import { NAV_ITEMS, activeItem } from './nav';
 
@@ -69,6 +70,9 @@ export default function AppShell({
   const [menu, setMenu] = useState<HTMLElement | null>(null);
   const [saindo, setSaindo] = useState(false);
   const [trocandoSenha, setTrocandoSenha] = useState(false);
+
+  // So na TV: no computador e no celular as setas tem outro sentido.
+  useSpatialNavigation(isTv);
 
   async function sair() {
     setSaindo(true);

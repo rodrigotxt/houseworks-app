@@ -17,7 +17,7 @@ o chrome em volta. Isso é possível porque os quatro alvos não são igualmente
 | Alvo | O que muda | Onde é resolvido |
 |---|---|---|
 | Desktop, tablet, celular | Tamanho e navegação | CSS e breakpoints, dentro do shell |
-| TV | **Entrada**: não existe ponteiro, é controle remoto | Um shell com alvos maiores e sem barra inferior |
+| TV | **Entrada**: não existe ponteiro, é controle remoto | Um shell com alvos maiores e sem barra inferior + navegação espacial por D-pad (`lib/device/spatial.ts`) |
 | App nativo de loja | **Runtime** | Fora de escopo — exigiria outro runtime |
 
 ```
@@ -93,9 +93,30 @@ Para gerar os tipos com o contrato em outro caminho:
 `/panel` é a tela de 10 pés: tipografia grande, sem barra inferior, feita para ser lida
 do sofá e operada pelo controle remoto. Quem chega de uma TV cai direto nela.
 
-**Estado atual:** é um painel de leitura — mostra a agenda de hoje e o progresso. Navegação
-espacial por D-pad ainda **não** está implementada; hoje o foco segue a ordem natural do
-navegador. O passo seguinte é um gerenciador de foco para as setas do controle.
+**Estado atual:** é um painel de leitura — mostra a agenda de hoje, o progresso e a lista
+ordenada com o que falta primeiro. **A navegação por controle remoto funciona**: as setas
+percorrem a lista, o item focado ganha um anel grosso e a página rola junto.
+
+### Como o D-pad funciona
+
+`lib/device/spatial.ts` decide para onde o foco vai; `useSpatialNavigation.ts` liga as
+setas a essa decisão, e **só na TV** — no computador e no celular as setas têm outro
+sentido. Três decisões que valem saber antes de mexer:
+
+1. **A escolha é geométrica, não a ordem do DOM.** Com duas colunas, "o próximo" faria a
+   seta para baixo pular de coluna; o que o controle promete é espaço. A função é pura
+   (recebe retângulos, devolve um índice), e por isso tem teste: `npm run test:spatial`,
+   com o runner embutido do Node e nenhuma dependência nova.
+2. **No fim da lista, a seta não é consumida.** Sem alvo naquela direção, o evento segue
+   para o navegador e a página rola — em vez de não acontecer nada.
+3. **O anel de foco vale para `:focus`, não só `:focus-visible`**, e mora em `globals.css`
+   ancorado em `html[data-tv]`. O foco aqui é movido por JavaScript, e a heurística do
+   navegador não garante que um `focus()` programático conte como "visível": o usuário
+   ficaria sem saber onde está. O atributo vai no `<html>`, escrito pelo layout raiz, para
+   o seletor ganhar por especificidade do anel do tema — que chega como classe do Emotion,
+   com a mesma especificidade, e venceria pela ordem de injeção.
+
+**O passo seguinte** é permitir concluir e pular tarefas direto do painel; hoje ele só lê.
 
 ---
 
@@ -114,8 +135,7 @@ service worker não atrapalhar o desenvolvimento.
 
 ## O que ainda não existe
 
-- **Navegação espacial por controle remoto** no painel da TV — hoje o foco segue a ordem natural
-  do navegador
+- **Concluir e pular pelo painel da TV** — hoje ele é só leitura
 - **Alternar entre casas** — a API suporta várias; a UI assume a primeira
 - **Configurações da casa** — nome, fuso, janela de avaliação e horizonte. O `PATCH /households/{id}`
   já suporta; a tela de Casa cuida hoje só de membros e convite.
