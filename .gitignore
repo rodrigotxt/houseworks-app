@@ -1,8 +1,13 @@
 .history
 
 # Segredos e estado local — nunca versionar.
-# O .env.example fica versionado de proposito: e o molde, sem valor real nenhum.
+#
+# Os MOLDES ficam versionados de proposito: sao o que um clone novo precisa para subir.
+# O `.env.prod.example` estava caindo na regra `.env.*` e nao existia no repositorio —
+# ou seja, o `cp .env.prod.example .env.prod` do docs/DEPLOY.md falhava em qualquer
+# clone que nao fosse esta maquina.
 .env
 .env.*
 !.env.example
+!.env.prod.example
 .env.prod
