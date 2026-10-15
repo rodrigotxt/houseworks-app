@@ -40,20 +40,35 @@ verdade: **contrato primeiro, implementação depois, no mesmo commit**.
 ## Rodando rápido
 
 ```bash
-cp .env.example .env                      # preencha (e gere um JWT_SECRET próprio)
-docker compose up -d mongodb backend
-docker compose exec backend npm run seed  # família de exemplo + agenda gerada
+make up      # sobe banco, API e interface (cria o .env a partir do molde se faltar)
+make seed    # família de exemplo + agenda gerada; imprime o código de convite
 ```
 
-A API responde em **http://localhost:3001**. Smoke test: `curl http://localhost:3001/api/v1/health`.
+| | |
+|---|---|
+| Interface | **http://localhost:3000** |
+| API | **http://localhost:3001** — smoke test: `curl localhost:3001/api/v1/health` |
 
-Sem Docker:
+**`make` sozinho lista tudo.** Os alvos do dia a dia:
+
+| Alvo | O que faz |
+|---|---|
+| `make up` / `make up-api` | sobe tudo (com rebuild) / só banco e API, que é mais rápido |
+| `make down` / `make restart` / `make rebuild` | derruba (dados ficam) / reinicia / reconstrói as imagens |
+| `make logs` / `make logs-api` / `make ps` / `make sh` | acompanhar e entrar |
+| `make seed` / `make seed-destroy` | popular / limpar os dados de exemplo |
+| `make test` / `make test-spatial` / `make lint` | suíte do backend / D-pad do painel / contrato |
+| `make gen-api` / `make gen-icons` | regenerar os tipos do contrato / a arte da marca |
+| `make tv-build` / `make tv-install` | compilar o APK da TV / instalar na TV por adb |
+
+Nada disso é obrigatório: cada alvo é um comando que também está escrito em
+[docs/OPERATIONS.md](./docs/OPERATIONS.md).
+
+Sem Docker, para trabalhar na API com reload imediato:
 
 ```bash
 cd backend && npm install && npm run dev
 ```
-
-O seed imprime o **código de convite** da casa e a senha dos usuários de exemplo.
 
 ---
 

@@ -17,6 +17,15 @@ Como rodar, configurar, testar e implantar. Para entender o código, veja
 
 ## 2. Rodando
 
+> **Há um Makefile na raiz.** `make` sozinho lista tudo, e ele cobre a maior parte desta seção:
+> `make up` (banco, API e interface), `make up-api`, `make down`, `make restart`, `make rebuild`,
+> `make logs`, `make ps`, `make sh`, `make seed`, `make test`, `make lint`, `make gen-api`,
+> `make gen-icons`, `make tv-build` e `make tv-install`.
+>
+> Ele é conveniência, não requisito: cada alvo vira um comando que está escrito aqui embaixo.
+> `make up` também **cria o `.env` a partir do molde** se ele não existir — sem isso a stack
+> sobe com variáveis vazias e o erro aparece longe da causa.
+
 ### Opção A — tudo em container
 
 ```bash
