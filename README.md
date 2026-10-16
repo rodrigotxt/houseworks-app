@@ -104,10 +104,32 @@ Detalhamento em [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md).
 
 ---
 
+## Fluxo de branches
+
+**`develop` é onde o trabalho acontece. `main` é produção.**
+
+```
+develop   trabalho do dia a dia -- commit e push aqui, sempre
+   |
+   +-- merge (so quando solicitado) -->  main  -->  deploy automatico (~100s)
+```
+
+Todo commit vai para `develop`, e o push é para `origin/develop`. **Nada vai direto para `main`.**
+O merge de `develop` em `main` é um ato deliberado, feito só quando alguém pede.
+
+O motivo é que **um push em `main` é um deploy**: o webhook do Komodo (§ 7 de
+[DEPLOY.md](./docs/DEPLOY.md)) reconstrói as imagens e sobe em produção sozinho. Trabalhar em
+`develop` é o que permite mexer no código sem que cada commit chegue à casa das pessoas.
+
+O Komodo filtra o webhook pela branch configurada na Stack (`main`). Foi verificado: um push em
+`develop` não recria nenhum container.
+
+---
+
 ## Estado
 
-Todas as seis fases do [roadmap](./docs/ROADMAP.md) estão concluídas e **as 36 operações do
-contrato respondem** — verificado batendo em cada rota declarada. 187 testes verdes.
+Todas as seis fases do [roadmap](./docs/ROADMAP.md) estão concluídas e **as 38 operações do
+contrato respondem** — verificado batendo em cada rota declarada. 208 testes verdes, em 14 suítes.
 
 A interface já cobre Tarefas, Agenda e Desempenho, além do painel da TV. O que ainda falta está
 listado no fim do [README do frontend](./frontend/README.md).
