@@ -294,6 +294,11 @@ exemplo, "concluída às 15h").
 8. **`pendingReviewForMe` vem vazio para quem não avalia** — `child` não tem `canRate`.
 9. **Esconda pelo `capabilities`**, sem confiar que a API vai recusar (ela vai, mas o usuário não
    deveria nem ver o botão).
+10. **Server Action que dá certo também precisa dizer que deu certo.** Uma action que devolve o
+    mesmo estado no sucesso e no repouso é indistinguível do "nada aconteceu ainda" — foi assim
+    que o diálogo de concluir ficou aberto sobre a lista já revalidada. Use três estados
+    (`'idle' | 'ok' | 'error'`, ver `components/schedule/actionState.ts`) e observe o `'ok'` num
+    efeito para fechar o que abriu. Vale para todo diálogo que se fecha sozinho.
 
 ---
 
@@ -329,14 +334,65 @@ const concluida = await api(`/occurrences/${id}/complete`, { method: 'POST', bod
 
 ## 10. Estado atual do front
 
-O que existe hoje e o que precisa mudar:
+O app vive em `frontend/` — Next.js 15 (App Router), React 19, MUI 7, TypeScript. **Ele está
+construído.** O que segue é o inventário real; planos antigos descrevendo telas "a fazer" não valem
+mais.
 
-| Item | Situação |
+### Rotas
+
+| Rota | O que é |
 |---|---|
-| Login | Existe (`components/LoginForm.tsx`), mas lê `response.token` direto — com o envelope agora é `response.data.token` |
-| Sessão | `lib/auth.tsx` decodifica o JWT localmente → **trocar por `GET /auth/me`** |
-| `middleware.ts` | Já lê o cookie `jwt_token` — o mesmo nome que a API emite. Continua válido |
-| Dashboard | Placeholder |
-| Navegação | Bottom bar com Tarefas / Cronograma / Desempenho, sem destino ainda |
-| Telas de dados | **Não existem** — é o trabalho a fazer |
-| Base de URL | `NEXT_PUBLIC_API_BASE_URL` (já definida no compose) |
+| `/login`, `/register` | Entrada. O formulário roda no browser; quem grava o cookie é a API |
+| `/onboarding` | Cria a casa, ou entra numa por convite — para quem está logado sem casa |
+| `/tasks` | Lista das tarefas ativas |
+| `/tasks/new`, `/tasks/[taskId]/edit` | Formulário de tarefa |
+| `/tasks/[taskId]` | Detalhe da tarefa |
+| `/schedule` | A agenda do horizonte, com concluir e pular ocorrência |
+| `/performance` | Os números do período |
+| `/household` | Membros, convite e criação de membro |
+| `/panel` | **Painel da TV** — só leitura, navegação por controle remoto |
+| `/offline` | Fallback do service worker |
+
+### Como o front fala com a API
+
+- **Leitura**: Server Components, pelo client de `lib/domain/api/`.
+- **Escrita**: Server Actions (`app/(app)/{tasks,schedule,household}/actions.ts`).
+- **Só quatro coisas saem do browser**: login, cadastro, troca de senha e logout. Motivo: é a
+  própria API que grava o cookie, e numa Server Action o `Set-Cookie` não chegaria ao browser.
+- Os tipos saem do contrato: `npm run gen:api` lê `docs/openapi.yaml` e regenera
+  `lib/domain/api/schema.d.ts`. Não edite esse arquivo à mão.
+
+### Os cascos
+
+O mesmo app serve quatro dispositivos, decididos **no servidor** pelo `User-Agent`
+(`lib/device/profile.ts`, aplicado em `app/layout.tsx` e `app/(app)/layout.tsx`; o `middleware.ts`
+cuida só da sessão):
+
+| `DeviceKind` | Dispositivo | O que muda |
+|---|---|---|
+| `mobile` | celular | PWA instalável — é o app completo |
+| `tablet` | tablet | o app completo |
+| `desktop` | navegador | o app completo |
+| `tv` | TV / Android TV | tela cheia, **só leitura**, sem barra de navegação; D-pad substitui o toque |
+
+Na TV a navegação espacial é `lib/device/spatial.ts` (geometria pura, testada com
+`npm run test:spatial`), ligada pelo hook `useSpatialNavigation`. O anel de foco mora em
+`globals.css`, sob `html[data-tv]`.
+
+### Shell e estado
+
+- `components/shells/AppShell.tsx` monta a moldura; `components/shells/nav.ts` diz o que aparece
+  em cada casco. `components/ui/theme.ts` é o tema MUI.
+- Sessão e casa atual: `lib/session/*`. O `middleware.ts` renova o token antes de renderizar,
+  para o usuário não cair no meio do uso.
+- **Sem store global.** O que é do servidor chega por Server Component; o que é local é `useState`.
+
+### Scripts
+
+| Comando | O que faz |
+|---|---|
+| `npm run dev` | Next em modo desenvolvimento (turbopack) |
+| `npm run gen:api` | Regenera os tipos a partir do `openapi.yaml` |
+| `npm run gen:icons` | Gera os ícones do PWA **e** os da TV (`../tv/.../res/`) |
+| `npm run test:spatial` | Testa a geometria da navegação por D-pad |
+| `npm run lint` | ESLint |
