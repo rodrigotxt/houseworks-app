@@ -105,6 +105,9 @@ function corpoDaTarefa(formData: FormData) {
     recurrence: recorrenciaDe(formData),
     difficulty: texto(formData, 'difficulty') ?? 'medio',
     points: numero(formData, 'points'),
+    // Vai SEMPRE, mesmo em branco -- como null. E o que permite LIMPAR a estimativa
+    // na edicao: se a chave fosse omitida, o valor antigo ficaria preso para sempre.
+    estimatedMinutes: numero(formData, 'estimatedMinutes') ?? null,
     // Em rodízio não existe responsável fixo — a API recusa os dois juntos.
     assignedTo: strategy === 'rotate' ? null : (assignedTo ?? null),
     assignmentStrategy: strategy,
@@ -136,8 +139,18 @@ export async function updateTask(
   try {
     // `status` não é enviado daqui: arquivar tem caminho próprio, e mandar os dois juntos
     // deixaria ambíguo o que o usuário quis.
-    const { name, description, recurrence, difficulty, points, assignedTo, assignmentStrategy } =
-      corpo;
+    // A lista precisa acompanhar o corpo inteiro de corpoDaTarefa(): um campo novo
+    // esquecido aqui some sem erro nenhum, e o formulario parece nao salvar.
+    const {
+      name,
+      description,
+      recurrence,
+      difficulty,
+      points,
+      estimatedMinutes,
+      assignedTo,
+      assignmentStrategy,
+    } = corpo;
 
     await (await serverApi()).tasks.update(taskId, {
       name,
@@ -145,6 +158,7 @@ export async function updateTask(
       recurrence,
       difficulty,
       points,
+      estimatedMinutes,
       assignedTo,
       assignmentStrategy,
     } as UpdateTaskRequest);

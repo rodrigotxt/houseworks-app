@@ -210,7 +210,13 @@ export default function TaskForm({
         </Typography>
 
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-          <FormControl fullWidth error={Boolean(erroDe('difficulty'))}>
+          <FormControl
+            error={Boolean(erroDe('difficulty'))}
+            // Largura fixa so a partir de sm: no celular o Stack empilha e o campo
+            // estica sozinho. minWidth 0 e o que permite os tres encolherem juntos
+            // quando a tela e estreita, em vez de estourar a linha.
+            sx={{ width: { sm: 240 }, minWidth: 0 }}
+          >
             <InputLabel id="dificuldade">Dificuldade</InputLabel>
             <Select
               name="difficulty"
@@ -237,7 +243,18 @@ export default function TaskForm({
             inputProps={{ min: 0, max: 100 }}
             helperText={erroDe('points') ?? 'Em branco = derivado da dificuldade'}
             error={Boolean(erroDe('points'))}
-            sx={{ width: { sm: 260 } }}
+            sx={{ width: { sm: 240 }, minWidth: 0 }}
+          />
+
+          <TextField
+            name="estimatedMinutes"
+            label="Estimativa (min)"
+            type="number"
+            defaultValue={task?.estimatedMinutes ?? ''}
+            inputProps={{ min: 1, max: 1440, step: 5 }}
+            helperText={erroDe('estimatedMinutes') ?? 'Opcional — quanto tempo leva'}
+            error={Boolean(erroDe('estimatedMinutes'))}
+            sx={{ width: { sm: 240 }, minWidth: 0 }}
           />
         </Stack>
 

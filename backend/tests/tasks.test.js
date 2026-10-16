@@ -130,6 +130,46 @@ describe('campos da tarefa', () => {
     expect(response.body.data.points).toBe(7);
   });
 
+  it('aceita estimativa em minutos', async () => {
+    const owner = await createOwner();
+
+    const response = await createTask(owner.token, owner.household.id, { estimatedMinutes: 30 });
+
+    expect(response.status).toBe(201);
+    expect(response.body.data.estimatedMinutes).toBe(30);
+  });
+
+  it('sem estimativa, o campo vem null (e nao some do JSON)', async () => {
+    const owner = await createOwner();
+
+    const response = await createTask(owner.token, owner.household.id);
+
+    expect(response.body.data).toHaveProperty('estimatedMinutes', null);
+  });
+
+  it('rejeita estimativa fora de 1..1440 -> 400', async () => {
+    const owner = await createOwner();
+
+    const zero = await createTask(owner.token, owner.household.id, { estimatedMinutes: 0 });
+    const demais = await createTask(owner.token, owner.household.id, { estimatedMinutes: 1441 });
+
+    expect(zero.status).toBe(400);
+    expect(demais.status).toBe(400);
+    expect(zero.body.error.code).toBe('VALIDATION_ERROR');
+    expect(zero.body.error.details).toEqual(
+      expect.arrayContaining([expect.objectContaining({ field: 'estimatedMinutes' })])
+    );
+  });
+
+  it('rejeita estimativa fracionada -> 400', async () => {
+    const owner = await createOwner();
+
+    const response = await createTask(owner.token, owner.household.id, { estimatedMinutes: 30.5 });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error.code).toBe('VALIDATION_ERROR');
+  });
+
   it('assignedTo precisa ser membro da casa -> 400', async () => {
     const owner = await createOwner();
     const deOutraCasa = await createOwner({ name: 'Casa vizinha' });
@@ -271,6 +311,39 @@ describe('tarefa por id', () => {
       .send({ difficulty: 'muito_dificil' });
 
     expect(response.body.data.points).toBe(8);
+  });
+
+  it('estimativa pode ser trocada e limpa', async () => {
+    const owner = await createOwner();
+    const criada = await createTask(owner.token, owner.household.id, { estimatedMinutes: 15 });
+
+    const trocada = await request(app)
+      .patch('/api/v1/tasks/' + criada.body.data.id)
+      .set(bearer(owner.token))
+      .send({ estimatedMinutes: 45 });
+
+    expect(trocada.body.data.estimatedMinutes).toBe(45);
+
+    // null e o que LIMPA. Sem isso a estimativa ficaria presa para sempre: nao
+    // haveria como voltar a "nao estimada" depois de ter estimado uma vez.
+    const limpa = await request(app)
+      .patch('/api/v1/tasks/' + criada.body.data.id)
+      .set(bearer(owner.token))
+      .send({ estimatedMinutes: null });
+
+    expect(limpa.body.data.estimatedMinutes).toBeNull();
+  });
+
+  it('atualizar outro campo nao mexe na estimativa', async () => {
+    const owner = await createOwner();
+    const criada = await createTask(owner.token, owner.household.id, { estimatedMinutes: 15 });
+
+    const response = await request(app)
+      .patch('/api/v1/tasks/' + criada.body.data.id)
+      .set(bearer(owner.token))
+      .send({ name: 'Outro nome' });
+
+    expect(response.body.data.estimatedMinutes).toBe(15);
   });
 
   it('tarefa de outra casa -> 404 (nao 403: nao vazamos existencia)', async () => {

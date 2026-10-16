@@ -19,6 +19,7 @@ import TaskActions from '@/components/tasks/TaskActions';
 import { isApiError } from '@/lib/domain/api';
 import { DIFFICULTY_LABELS, describeRecurrence } from '@/lib/domain/labels';
 import { formatFullDate } from '@/lib/domain/dates';
+import { formatDuration } from '@/lib/domain/format';
 import { canDeleteTaskForever, canEditTask } from '@/lib/domain/rules';
 import { requireContext, serverApi } from '@/lib/session/server';
 
@@ -96,6 +97,13 @@ export default async function TaskDetailPage({
               <Linha rotulo="Vale">
                 <Chip size="small" color="primary" label={tarefa.points + ' pontos'} />
               </Linha>
+
+              {/* Só aparece quando alguém estimou: linha vazia com '—' poluiria a ficha. */}
+              {tarefa.estimatedMinutes != null && (
+                <Linha rotulo="Leva">
+                  <Typography variant="body1">{formatDuration(tarefa.estimatedMinutes)}</Typography>
+                </Linha>
+              )}
 
               <Linha rotulo="Quem faz">
                 <Typography variant="body1">

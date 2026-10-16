@@ -21,7 +21,7 @@ ADB := $(ANDROID_HOME)/platform-tools/adb
 .DEFAULT_GOAL := help
 
 .PHONY: help up up-api down restart rebuild logs logs-api ps sh seed seed-destroy \
-        install test test-watch test-spatial lint gen-api gen-icons \
+        install test test-watch test-front test-domain test-spatial lint gen-api gen-icons \
         tv-build tv-install tv-devices
 
 help: ## Lista os alvos disponiveis
@@ -96,6 +96,12 @@ test: ## Roda a suite do backend (MongoDB em memoria, sem Docker)
 
 test-watch: ## Roda a suite do backend em modo watch
 	cd $(BACKEND) && npm run test:watch
+
+test-front: ## Roda os testes de unidade do frontend (dominio + controle remoto)
+	cd $(FRONTEND) && npm run test:front
+
+test-domain: ## Roda os testes do dominio do frontend (formatos)
+	cd $(FRONTEND) && npm run test:domain
 
 test-spatial: ## Roda os testes da navegacao por controle remoto (frontend)
 	cd $(FRONTEND) && npm run test:spatial

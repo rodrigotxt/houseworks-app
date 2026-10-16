@@ -129,7 +129,8 @@ O Komodo filtra o webhook pela branch configurada na Stack (`main`). Foi verific
 ## Estado
 
 Todas as seis fases do [roadmap](./docs/ROADMAP.md) estão concluídas e **as 38 operações do
-contrato respondem** — verificado batendo em cada rota declarada. 208 testes verdes, em 14 suítes.
+contrato respondem** — verificado batendo em cada rota declarada. 214 testes verdes, em 14 suítes,
+mais os de unidade do frontend (`make test-front`).
 
 A interface já cobre Tarefas, Agenda e Desempenho, além do painel da TV. O que ainda falta está
 listado no fim do [README do frontend](./frontend/README.md).

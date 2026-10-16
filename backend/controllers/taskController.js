@@ -50,7 +50,7 @@ function assertAssignmentConsistency(strategy, assignedTo) {
 // @route   POST /api/v1/households/:householdId/tasks
 // @access  Capability canManageTasks (owner ou adult)
 exports.create = async (req, res) => {
-  const { name, description, recurrence, difficulty, points, assignedTo, assignmentStrategy } =
+  const { name, description, recurrence, difficulty, points, estimatedMinutes, assignedTo, assignmentStrategy } =
     req.body;
 
   if (assignedTo) {
@@ -67,6 +67,7 @@ exports.create = async (req, res) => {
     difficulty,
     // Sem pontos informados, o pre-validate do modelo deriva da dificuldade.
     points,
+    estimatedMinutes,
     assignedTo: assignedTo || null,
     assignmentStrategy,
     createdBy: req.userId,
@@ -128,8 +129,17 @@ exports.getById = async (req, res) => {
 // @access  Capability canManageTasks (owner ou adult)
 exports.update = async (req, res) => {
   const task = req.task;
-  const { name, description, recurrence, difficulty, points, assignedTo, assignmentStrategy, status } =
-    req.body;
+  const {
+    name,
+    description,
+    recurrence,
+    difficulty,
+    points,
+    estimatedMinutes,
+    assignedTo,
+    assignmentStrategy,
+    status,
+  } = req.body;
 
   if (assignedTo) {
     await assertMemberOfHousehold(task.household, assignedTo);
@@ -159,6 +169,8 @@ exports.update = async (req, res) => {
   }
 
   if (points !== undefined) task.points = points;
+  // Passar null aqui e o que LIMPA a estimativa: `undefined` significa "nao mexe".
+  if (estimatedMinutes !== undefined) task.estimatedMinutes = estimatedMinutes;
   if (assignmentStrategy !== undefined) task.assignmentStrategy = assignmentStrategy;
   if (assignedTo !== undefined) task.assignedTo = assignedTo || null;
 

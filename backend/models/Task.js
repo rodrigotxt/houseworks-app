@@ -108,6 +108,17 @@ const TaskSchema = new mongoose.Schema(
       max: [100, 'Os pontos devem ser no maximo 100.'],
     },
 
+    // Quanto tempo a tarefa costuma levar, em minutos. Nula = nao estimada.
+    // E dado de conveniencia para a casa planejar o dia, nao regra de negocio:
+    // nada no sistema depende dela, e nula nunca impede nada.
+    // O teto de 1440 (24h) e so uma barreira contra erro de digitacao.
+    estimatedMinutes: {
+      type: Number,
+      min: [1, 'A estimativa deve ser de pelo menos 1 minuto.'],
+      max: [1440, 'A estimativa deve ser no maximo 1440 minutos (24 horas).'],
+      default: null,
+    },
+
     // Com "fixed", vale o assignedTo. Com "rotate", as ocorrencias sao distribuidas
     // em rodizio entre os membros da casa (ver services/occurrences.js).
     assignmentStrategy: {

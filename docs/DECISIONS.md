@@ -51,6 +51,33 @@ caminho, onde a existência dela já é conhecida.
 
 **Consequência.** Um cliente não consegue enumerar ids de outras casas.
 
+### D33 — Estimativa de tempo é dado de conveniência, e `null` limpa
+
+**Contexto.** A tarefa sabia quanto *vale* (pontos) mas não quanto *demora*. Sem isso não dá
+para olhar a agenda de sábado e saber se cabe — que é a pergunta que a casa realmente faz.
+
+**Decisão.** `estimatedMinutes`: inteiro de 1 a 1440, **nulável**. Fora de `required` no
+contrato, como `assignedTo`. Um `null` explícito **limpa** a estimativa; omitir a chave não a
+toca.
+
+**Descartado.**
+
+- **Derivar da dificuldade**, como os pontos fazem. Não funciona: dificuldade não prediz
+  duração. Limpar o banheiro é `dificil` e rápido; passar o aspirador é `medio` e demorado. Os
+  pontos medem o *peso* da tarefa, não o *tempo* dela — são eixos diferentes.
+- **Obrigatório.** Boa parte das tarefas não tem duração previsível, e exigir um número
+  inventado só para preencher o campo produziria dado ruim.
+- **Texto livre** ("meia hora", "a manhã toda"). Não dá para somar depois, e a soma é
+  justamente para o que o campo existe.
+
+**Consequência.** É o primeiro campo do domínio que existe para ser **exibido**, não para
+decidir: nenhuma regra de negócio o consulta, e nulo nunca impede nada. O teto de 1440 (24h) é
+barreira contra erro de digitação, não uma regra de negócio.
+
+O ajuste que isso exigiu no cliente também vale como aviso: a Server Action de atualização
+desestrutura os campos um a um, então um campo novo esquecido nessa lista **some sem erro
+nenhum** — o formulário parece não salvar. Criar passava (o corpo vai inteiro), editar não.
+
 ---
 
 ## B. Tempo e recorrência

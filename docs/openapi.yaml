@@ -2023,6 +2023,16 @@ components:
             Pontos creditados quando a execução é aprovada. Derivado da dificuldade por padrão
             (`muito_facil`=1, `facil`=2, `medio`=3, `dificil`=5, `muito_dificil`=8), sobreponível.
           example: 5
+        estimatedMinutes:
+          description: |
+            Quanto tempo a tarefa costuma levar, em minutos. `null` = não estimado. É um dado de
+            conveniência para a casa (planejar o dia), não uma regra: `null` nunca impede nada.
+          oneOf:
+            - type: integer
+              minimum: 1
+              maximum: 1440
+            - type: 'null'
+          example: 30
         assignedTo:
           description: |
             Responsável fixo. `null` significa "qualquer membro pode assumir" — nesse caso cada
@@ -2606,6 +2616,15 @@ components:
           minimum: 0
           maximum: 100
           description: Opcional. Sem ele, deriva da dificuldade.
+        estimatedMinutes:
+          description: |
+            Opcional. Quanto tempo a tarefa leva, em minutos. `null` ou omitido = não estimado.
+          oneOf:
+            - type: integer
+              minimum: 1
+              maximum: 1440
+            - type: 'null'
+          example: 30
         assignedTo:
           type: string
           description: ID do membro responsável. Omitido ou `null` = qualquer um pode assumir.
@@ -2639,6 +2658,16 @@ components:
           type: integer
           minimum: 0
           maximum: 100
+        estimatedMinutes:
+          description: |
+            Quanto tempo a tarefa costuma levar, em minutos. `null` = não estimado. É um dado de
+            conveniência para a casa (planejar o dia), não uma regra: `null` nunca impede nada.
+          oneOf:
+            - type: integer
+              minimum: 1
+              maximum: 1440
+            - type: 'null'
+          example: 30
         assignedTo:
           oneOf:
             - type: string

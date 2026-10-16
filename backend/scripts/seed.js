@@ -36,24 +36,28 @@ function tasksFor(today) {
     {
       name: 'Limpar banheiro',
       difficulty: 'dificil',
+      estimatedMinutes: 45,
       assignedTo: 'isabella',
       recurrence: { frequency: 'semanal', weekdays: [6], startDate: today },
     },
     {
       name: 'Lavar louca',
       difficulty: 'facil',
+      estimatedMinutes: 15,
       assignedTo: 'arthur',
       recurrence: { frequency: 'diaria', startDate: today },
     },
     {
       name: 'Tirar o lixo',
       difficulty: 'facil',
+      estimatedMinutes: 5,
       assignedTo: null,
       recurrence: { frequency: 'diaria', startDate: today },
     },
     {
       name: 'Passar aspirador',
       difficulty: 'medio',
+      estimatedMinutes: 30,
       assignedTo: 'gabryel',
       recurrence: { frequency: 'semanal', interval: 2, weekdays: [3, 6], startDate: today },
     },
@@ -61,6 +65,7 @@ function tasksFor(today) {
       // Sem responsavel fixo: a cada ocorrencia o rodizio escolhe um membro.
       name: 'Trocar roupa de cama',
       difficulty: 'medio',
+      estimatedMinutes: 20,
       assignedTo: null,
       assignmentStrategy: 'rotate',
       recurrence: { frequency: 'semanal', weekdays: [0], startDate: today },
@@ -69,6 +74,7 @@ function tasksFor(today) {
       // Tarefa pontual: uma ocorrencia so.
       name: 'Limpar a caixa de agua',
       difficulty: 'muito_dificil',
+      estimatedMinutes: 90,
       assignedTo: null,
       recurrence: { frequency: 'ocasional', startDate: today },
     },
@@ -134,6 +140,7 @@ async function importData() {
         createdBy: usersByUsername.rodrigo._id,
         name: data.name,
         difficulty: data.difficulty,
+        estimatedMinutes: data.estimatedMinutes,
         assignedTo: data.assignedTo ? usersByUsername[data.assignedTo]._id : null,
         assignmentStrategy: data.assignmentStrategy,
         recurrence: data.recurrence,

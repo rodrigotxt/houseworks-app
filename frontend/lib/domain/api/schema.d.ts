@@ -99,7 +99,21 @@ export interface paths {
         put?: never;
         /**
          * Renovar token
-         * @description Emite um novo JWT a partir de uma sessão ainda válida e renova o cookie.
+         * @description Emite um novo JWT e renova o cookie, **rotacionando**: o token apresentado é revogado.
+         *     Uma sessão renovada não deixa dois tokens válidos circulando.
+         *
+         *     É a **única rota que aceita um token já expirado**. Em todas as outras, expirado é
+         *     sessão encerrada (`TOKEN_EXPIRED`). Aqui, um token expirado há pouco é exatamente o
+         *     caso a atender — exigir um token válido para renovar tornaria a renovação impossível
+         *     justamente quando ela é necessária.
+         *
+         *     O limite é a **janela de sessão** (`SESSION_MAX_AGE`, 30 dias por padrão): passado
+         *     esse tempo desde a expiração, a resposta é `TOKEN_EXPIRED` e é preciso entrar de
+         *     novo. Sem esse teto, um token vazado renovaria para sempre.
+         *
+         *     O **cookie** acompanha a sessão, e não o token: ele dura `SESSION_MAX_AGE`, e o
+         *     token dentro dele continua curto (`JWT_EXPIRES_IN`). Descartar o cookie junto com o
+         *     token deixaria a renovação sem nada para apresentar.
          */
         post: operations["refreshToken"];
         delete?: never;
@@ -924,6 +938,12 @@ export interface components {
              */
             points: number;
             /**
+             * @description Quanto tempo a tarefa costuma levar, em minutos. `null` = não estimado. É um dado de
+             *     conveniência para a casa (planejar o dia), não uma regra: `null` nunca impede nada.
+             * @example 30
+             */
+            estimatedMinutes?: number | null;
+            /**
              * @description Responsável fixo. `null` significa "qualquer membro pode assumir" — nesse caso cada
              *     ocorrência nasce sem responsável.
              */
@@ -1299,6 +1319,11 @@ export interface components {
             /** @description Opcional. Sem ele, deriva da dificuldade. */
             points?: number;
             /**
+             * @description Opcional. Quanto tempo a tarefa leva, em minutos. `null` ou omitido = não estimado.
+             * @example 30
+             */
+            estimatedMinutes?: number | null;
+            /**
              * @description ID do membro responsável. Omitido ou `null` = qualquer um pode assumir.
              * @example 66f1a2b3c4d5e6f7a8b9c0d4
              */
@@ -1320,6 +1345,12 @@ export interface components {
             /** @enum {string} */
             difficulty?: "muito_facil" | "facil" | "medio" | "dificil" | "muito_dificil";
             points?: number;
+            /**
+             * @description Quanto tempo a tarefa costuma levar, em minutos. `null` = não estimado. É um dado de
+             *     conveniência para a casa (planejar o dia), não uma regra: `null` nunca impede nada.
+             * @example 30
+             */
+            estimatedMinutes?: number | null;
             assignedTo?: string | null;
             /** @enum {string} */
             assignmentStrategy?: "fixed" | "rotate";

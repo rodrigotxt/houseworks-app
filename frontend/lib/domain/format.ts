@@ -41,6 +41,22 @@ export function formatRating(value: number | null | undefined): string {
   return value.toFixed(1);
 }
 
+/**
+ * Estimativa de tempo em linguagem curta: 45 -> '45 min', 60 -> '1h', 90 -> '1h30'.
+ *
+ * Passar de 60 minutos para horas evita o absurdo de ler '90 min' numa tela em que o
+ * resto do texto já está em unidades maiores.
+ */
+export function formatDuration(minutes: number | null | undefined): string {
+  if (minutes === null || minutes === undefined) return '—';
+  if (minutes < 60) return minutes + ' min';
+
+  const horas = Math.floor(minutes / 60);
+  const resto = minutes % 60;
+
+  return resto === 0 ? horas + 'h' : horas + 'h' + String(resto).padStart(2, '0');
+}
+
 /** Concorda o verbo com a quantidade: '1 tarefa' / '3 tarefas'. */
 export function plural(quantidade: number, singular: string, plural: string): string {
   return quantidade + ' ' + (quantidade === 1 ? singular : plural);

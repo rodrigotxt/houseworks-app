@@ -100,6 +100,7 @@ retorna `409 LAST_OWNER_CANNOT_LEAVE`.
 | `recurrence` | a regra (ver §3) |
 | `difficulty` | `muito_facil`…`muito_dificil` |
 | `points` | derivado da dificuldade, sobreponível |
+| `estimatedMinutes` | quanto tempo leva, em minutos; `null` = não estimado. **Nenhuma regra depende dele** (D33) |
 | `assignmentStrategy` | `fixed` (usa `assignedTo`) \| `rotate` (rodízio) |
 | `assignedTo` | responsável fixo; `null` = qualquer membro |
 | `status` | `active` \| `archived` |
