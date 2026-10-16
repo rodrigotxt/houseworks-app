@@ -50,7 +50,7 @@ export async function completeOccurrence(
   }
 
   revalidarTudo();
-  return { status: 'idle' };
+  return { status: 'ok' };
 }
 
 export async function skipOccurrence(
@@ -68,7 +68,7 @@ export async function skipOccurrence(
   }
 
   revalidarTudo();
-  return { status: 'idle' };
+  return { status: 'ok' };
 }
 
 export async function undoOccurrence(
@@ -82,5 +82,5 @@ export async function undoOccurrence(
   }
 
   revalidarTudo();
-  return { status: 'idle' };
+  return { status: 'ok' };
 }

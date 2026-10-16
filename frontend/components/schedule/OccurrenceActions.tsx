@@ -8,7 +8,7 @@
 
 'use client';
 
-import { useActionState, useState } from 'react';
+import { useActionState, useEffect, useState } from 'react';
 
 import Alert from '@mui/material/Alert';
 import Button from '@mui/material/Button';
@@ -70,6 +70,19 @@ export default function OccurrenceActions({
   const ocupado = concluindo || pulando || desfazendo;
   const erro = conclusao.message ?? pulo.message;
   const tamanho = large ? 'large' : 'medium';
+
+  // Fecha o diálogo quando a ação dá CERTO.
+  //
+  // Precisa ser um efeito sobre o resultado, e não um setDialogo no envio: quem sabe se deu
+  // certo é a Server Action. Fechar antes de enviar esconderia a mensagem de "alguém da casa
+  // já marcou esta" — que é comum e merece ficar na tela, com o diálogo aberto.
+  useEffect(() => {
+    if (conclusao.status === 'ok') setDialogo(null);
+  }, [conclusao]);
+
+  useEffect(() => {
+    if (pulo.status === 'ok') setDialogo(null);
+  }, [pulo]);
 
   return (
     <Stack spacing={1} sx={{ alignItems: { xs: 'stretch', sm: 'flex-end' } }}>
