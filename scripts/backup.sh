@@ -17,7 +17,8 @@
 #
 # VARIÁVEIS (todas com padrão sensato):
 #   BACKUP_DIR        onde guardar                /var/backups/houseworks
-#   KEEP_DAYS         quantos dias manter         14
+#   KEEP_DAYS         quantos dias manter local   14
+#   KEEP_REMOTE_DAYS  quantos dias manter no remoto 60
 #   MONGO_CONTAINER   container do MongoDB        houseworks-mongodb-1
 #   HOUSEWORKS_ENV    de onde ler as credenciais  /etc/komodo/stacks/houseworks/.env
 #   RCLONE_REMOTE     destino remoto (vazio = sem cópia externa)
@@ -37,6 +38,10 @@ fi
 
 BACKUP_DIR="${BACKUP_DIR:-/var/backups/houseworks}"
 KEEP_DAYS="${KEEP_DAYS:-14}"
+# A cópia externa guarda por mais tempo que a local: o disco da VPS é caro e pequeno,
+# o bucket é barato. O local serve para restaurar rápido; o remoto, para o dia em que a
+# máquina não existir mais.
+KEEP_REMOTE_DAYS="${KEEP_REMOTE_DAYS:-60}"
 MONGO_CONTAINER="${MONGO_CONTAINER:-houseworks-mongodb-1}"
 HOUSEWORKS_ENV="${HOUSEWORKS_ENV:-/etc/komodo/stacks/houseworks/.env}"
 RCLONE_REMOTE="${RCLONE_REMOTE:-}"
@@ -150,6 +155,14 @@ if [ -n "$RCLONE_REMOTE" ]; then
   # 'copy' (não 'sync') de propósito: sync APAGARIA no destino o que não existe aqui.
   # Numa cópia de segurança, remover do destino é a última coisa que se quer.
   rclone copy "$final" "$RCLONE_REMOTE" --no-traverse
+
+  # A retenção remota é EXPLÍCITA e separada: só apaga arquivo com mais de
+  # KEEP_REMOTE_DAYS dias, e só o padrão de nome deste projeto. Sem isto o bucket
+  # cresceria para sempre — o 'copy' nunca remove nada, que é justamente o desejado.
+  removidos=$(rclone delete "$RCLONE_REMOTE" --min-age "${KEEP_REMOTE_DAYS}d" \
+    --include 'houseworks-*.archive.gz' --verbose 2>&1 | grep -c 'Deleted' || true)
+  [ "${removidos:-0}" -gt 0 ] && registrar "Retenção remota: $removidos cópia(s) com mais de $KEEP_REMOTE_DAYS dias apagada(s) do destino."
+
   registrar "Cópia externa concluída."
 else
   registrar "RCLONE_REMOTE vazio: a cópia ficou só nesta máquina."

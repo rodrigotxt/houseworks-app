@@ -274,7 +274,12 @@ RCLONE_REMOTE=r2:houseworks-backups
 ```
 
 O script usa `rclone copy`, nunca `sync`: numa cópia de segurança, apagar no destino é a última
-coisa que se quer.
+coisa que se quer. Como `copy` nunca remove, a limpeza do bucket é **explícita e separada**:
+`KEEP_REMOTE_DAYS` (padrão 60) apaga do destino, e só do destino, o que passou daquele prazo —
+e apenas arquivos que casem com `houseworks-*.archive.gz`.
+
+Por que 60 dias no bucket e 14 na VPS: o disco da VPS é caro e pequeno, o bucket é barato. O
+local existe para restaurar rápido; o remoto, para o dia em que a máquina não existir mais.
 
 ### Ligar o aviso de falha
 

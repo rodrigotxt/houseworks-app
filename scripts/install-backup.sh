@@ -48,6 +48,10 @@ BACKUP_DIR=/var/backups/houseworks
 # Quantos dias manter. 14 cobre "estragou ontem" e "estragou semana passada".
 KEEP_DAYS=14
 
+# Quantos dias manter no destino remoto. Mais folgado que o local: o disco da VPS é
+# caro e pequeno, o bucket é barato.
+KEEP_REMOTE_DAYS=60
+
 # Container do MongoDB (o nome que o Komodo cria para a stack).
 MONGO_CONTAINER=houseworks-mongodb-1
 
