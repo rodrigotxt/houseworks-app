@@ -98,6 +98,7 @@ backend/
   tests/         suíte completa
 frontend/        a interface (mesmo repositório — ver frontend/README.md)
 docs/            contrato, domínio, decisões, operação, implantação e guia do front
+scripts/         backup e ensaio de restauração do banco (rodam no servidor)
 ```
 
 Detalhamento em [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md).

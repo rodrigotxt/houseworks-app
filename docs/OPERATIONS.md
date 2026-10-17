@@ -218,3 +218,114 @@ continua **correto** (o índice único garante), apenas redundante.
 - [ ] Caso negado coberto (sem token, papel errado, outra casa) quando a rota exige autorização
 - [ ] Decisão nova registrada em [DECISIONS.md](./DECISIONS.md)
 - [ ] Nenhum segredo no diff
+
+---
+
+## 12. Backup e restauração
+
+O banco é o único dado insubstituível do projeto — pontos, execuções, avaliações, quem fez o
+quê. Ele vive num volume Docker numa única VPS. Por isso tem cópia **e** ensaio de restauração.
+
+### Instalar (numa máquina nova, ou para atualizar os scripts)
+
+```bash
+sudo ./scripts/install-backup.sh
+```
+
+Ficam instalados:
+
+| Caminho | O que é |
+|---|---|
+| `/opt/houseworks-backup/backup.sh` | o dump |
+| `/opt/houseworks-backup/restore.sh` | o ensaio de restauração |
+| `/etc/default/houseworks-backup` | configuração (destino remoto, monitor, retenção) |
+| `/etc/cron.d/houseworks-backup` | backup diário às 03:30; ensaio aos domingos às 05:00 |
+
+Os scripts são **copiados**, não apontados para o clone do Komodo. Aquele caminho pertence ao
+Komodo e acompanha a branch configurada; um cron apontando para lá quebra em silêncio no dia em
+que ele mudar — e cron quebrado não avisa ninguém.
+
+### O que o backup faz, e por que nessa ordem
+
+1. dump comprimido num arquivo **temporário**;
+2. confere que é um gzip íntegro (`gzip -t`) e que não está vazio;
+3. só então renomeia para o nome final — **um backup pela metade nunca "existe"**;
+4. apaga o que passou de `KEEP_DAYS` (padrão 14);
+5. copia para fora, se `RCLONE_REMOTE` estiver configurado;
+6. avisa o monitor externo. Se qualquer passo falhar, avisa que **falhou**.
+
+As credenciais vêm de `/etc/komodo/stacks/houseworks/.env`, que o Komodo reescreve a cada
+deploy, e vão para o container por variável de ambiente — não por argumento de linha de comando,
+que apareceria em `ps` e no histórico do shell.
+
+### Ligar a cópia fora da máquina
+
+Só local não resolve perder o servidor. Com um bucket no Cloudflare R2:
+
+```bash
+sudo apt-get install -y rclone        # ou o binário oficial
+sudo rclone config                    # crie o remote r2, tipo "s3", provider "Cloudflare"
+```
+
+Depois, em `/etc/default/houseworks-backup`:
+
+```
+RCLONE_REMOTE=r2:houseworks-backups
+```
+
+O script usa `rclone copy`, nunca `sync`: numa cópia de segurança, apagar no destino é a última
+coisa que se quer.
+
+### Ligar o aviso de falha
+
+Um backup que falha em silêncio é pior que não ter. Crie um check em
+[healthchecks.io](https://healthchecks.io) com frequência diária e período de tolerância de
+algumas horas, e cole a URL de ping (sem barra final):
+
+```
+HEALTHCHECK_URL=https://hc-ping.com/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+```
+
+O script faz um ping quando termina bem e `/fail` quando algo dá errado. Se parar de pingar, o
+serviço avisa.
+
+### O ensaio de restauração
+
+```bash
+sudo /opt/houseworks-backup/restore.sh              # a cópia mais recente
+sudo /opt/houseworks-backup/restore.sh arquivo.gz   # uma cópia específica
+```
+
+Ele sobe um container **novo**, com volume próprio, restaura ali e confere:
+
+- as coleções centrais existem (`users`, `households`, `memberships`, `tasks`, `taskoccurrences`);
+- nenhuma das centrais está vazia;
+- os índices voltaram — inclusive o **único** de `memberships`, sem o qual a casa passa a aceitar
+  o mesmo usuário duas vezes (e o estrago só aparece meses depois);
+- uma consulta de verdade devolve a casa pelo nome.
+
+Sai com código ≠ 0 se qualquer verificação falhar, e destrói o container no fim. **A produção não é
+tocada nem para leitura.**
+
+### Restaurar de verdade (quando precisar)
+
+O ensaio é descartável; isto é o procedimento real, com a aplicação parada:
+
+```bash
+docker compose -f docker-compose.proxy.yml stop backend frontend
+docker exec -i houseworks-mongodb-1 mongorestore --archive --gzip --drop \
+  --username "$MONGO_USER" --password "$MONGO_PASSWORD" --authenticationDatabase admin \
+  < /var/backups/houseworks/houseworks-AAAA-MM-DD_HHMMSS.archive.gz
+docker compose -f docker-compose.proxy.yml start backend frontend
+```
+
+`--drop` apaga cada coleção antes de recriar. Sem ele, o restore **soma** ao que já existe e
+duplica tudo. É o erro clássico de restauração.
+
+### Conferir
+
+```bash
+sudo tail -5 /var/log/houseworks-backup.log
+sudo tail -20 /var/log/houseworks-restore.log
+sudo ls -la /var/backups/houseworks/
+```

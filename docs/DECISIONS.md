@@ -460,3 +460,41 @@ o `toJSON` do pai.
 
 **Decisão.** Todo modelo configura os dois com `createJsonOptions()`
 (`config/serialization.js`), que expõe `id` e remove `_id`/`__v`.
+
+---
+
+### D35 — Backup se prova restaurando, não conferindo o arquivo
+
+**Contexto.** O banco — pontos, execuções, avaliações, histórico — vivia num único volume
+Docker, numa única VPS, **sem nenhuma cópia**. O custo disso é assimétrico: o código se
+reescreve, o histórico da casa não.
+
+**Decisão.** Um script de dump e um **ensaio de restauração** que restaura a cópia num container
+descartável e confere o conteúdo. Os dois versionados em `scripts/`, instalados por
+`scripts/install-backup.sh` e agendados por cron.
+
+**Quatro decisões dentro dessa:**
+
+- **O nome final só aparece depois de o arquivo passar no teste.** O dump vai para
+  `.archive.gz.parcial` e só é renomeado após `gzip -t` e a checagem de tamanho. Um dump
+  interrompido no meio, escrito direto no nome final, produz um arquivo plausível e inútil.
+- **`rclone copy`, nunca `sync`.** `sync` espelha inclusive as remoções: uma cópia local apagada
+  se propagaria para o destino. Em backup, remover no destino é a última coisa que se quer.
+- **O ensaio sobe um MongoDB novo**, com volume próprio, em vez de usar um banco auxiliar da
+  mesma instância. Custa segundos e garante que a produção não é tocada nem para leitura — e que
+  a cópia se basta sozinha, sem nada do servidor de origem.
+- **Os scripts são copiados para `/opt/houseworks-backup`**, não apontados do clone do Komodo.
+  Aquele caminho pertence ao Komodo e acompanha a branch configurada; um cron apontando para lá
+  quebraria em silêncio no dia em que o caminho mudasse.
+
+**Descartado.**
+
+- **Só conferir o arquivo** (tamanho, gzip íntegro). É o que quase todo mundo faz, e não pega o
+  caso mais provável: o dump íntegro como arquivo e incompleto como dado.
+- **Verificar só no dia do incidente.** É o pior momento possível para descobrir que a cópia não
+  presta. Por isso o ensaio também roda no cron, semanalmente.
+
+**Consequência.** Passam a existir duas coisas verificáveis: há uma cópia diária, e ela foi
+provada restaurável. O `--drop` no procedimento real está documentado em
+[OPERATIONS.md](./OPERATIONS.md) §12 — sem ele o restore **soma** ao banco existente e duplica
+tudo.
