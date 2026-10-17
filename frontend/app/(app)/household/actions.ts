@@ -21,6 +21,7 @@ import { revalidatePath } from 'next/cache';
 
 import { isApiError } from '@/lib/domain/api';
 import { messageFor } from '@/lib/domain/labels';
+import type { FreeTime } from '@/lib/domain/freeTime';
 import type { Capability, Role } from '@/lib/domain/rules';
 import { requireContext, serverApi } from '@/lib/session/server';
 
@@ -46,7 +47,9 @@ function toState(causa: unknown): MemberActionState {
 export async function saveMember(
   userId: string,
   role: Role,
-  capabilities: Record<Capability, boolean>
+  capabilities: Record<Capability, boolean>,
+  // null LIMPA a configuracao (volta a "nunca configurado"), que e diferente de zerar.
+  freeTime: FreeTime | null
 ): Promise<MemberActionState> {
   const { householdId } = await requireContext();
 
@@ -54,6 +57,7 @@ export async function saveMember(
     await (await serverApi()).households.updateMember(householdId, userId, {
       role,
       capabilities,
+      freeTime,
     });
   } catch (causa) {
     return toState(causa);

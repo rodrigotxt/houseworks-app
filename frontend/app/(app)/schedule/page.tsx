@@ -22,6 +22,7 @@ import Typography from '@mui/material/Typography';
 
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 
 import EmptyState from '@/components/ui/EmptyState';
 import PageHeader from '@/components/ui/PageHeader';
@@ -29,6 +30,8 @@ import OccurrenceActions from '@/components/schedule/OccurrenceActions';
 import type { Page, TaskOccurrence } from '@/lib/domain/api/types';
 import { OCCURRENCE_STATUS_LABELS } from '@/lib/domain/labels';
 import { addDays, formatDayAndMonth, relativeDueLabel, todayInZone, weekdayOf } from '@/lib/domain/dates';
+import { cargasDoDia, type MembroComTempoLivre } from '@/lib/domain/freeTime';
+import { formatDuration } from '@/lib/domain/format';
 import {
   canComplete,
   canSkip,
@@ -90,6 +93,10 @@ export default async function SchedulePage({
   const inicio = from && /^\d{4}-\d{2}-\d{2}$/.test(from) ? from : inicioDaSemana(hoje);
   const fim = addDays(inicio, 6);
 
+  // Os membros entram por causa do tempo livre: o aviso de carga e por pessoa. Nao chega
+  // a ser um N+1 — e uma chamada por tela, nao por ocorrencia.
+  const membrosDaCasa = await api.households.listMembers(householdId);
+
   const items = await todasAsOcorrencias((pagina) =>
     escopo === 'minhas'
       ? api.occurrences.listMine({ from: inicio, to: fim, householdId, pageSize: 100, page: pagina })
@@ -103,6 +110,12 @@ export default async function SchedulePage({
     doDia.push(ocorrencia);
     porDia.set(ocorrencia.dueDate, doDia);
   }
+
+  const membros: MembroComTempoLivre[] = membrosDaCasa.map((membro) => ({
+    id: membro.user.id,
+    name: membro.user.name,
+    freeTime: membro.freeTime ?? null,
+  }));
 
   const dias = [...porDia.keys()].sort();
   const progresso = completionProgress(items);
@@ -178,6 +191,11 @@ export default async function SchedulePage({
             const doDia = porDia.get(dia) ?? [];
             const feitas = doDia.filter((o) => o.status === 'done').length;
 
+            // Só quem passa do próprio tempo livre. Quem não configurou fica fora da conta.
+            const excedidos = cargasDoDia(doDia, membros, weekdayOf(dia)).filter(
+              (carga) => carga.excede
+            );
+
             return (
               <Box key={dia}>
                 <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1, mb: 1.5 }}>
@@ -191,6 +209,23 @@ export default async function SchedulePage({
                     {feitas}/{doDia.length}
                   </Typography>
                 </Box>
+
+                {excedidos.map((carga) => (
+                  <Stack
+                    key={carga.memberId}
+                    direction="row"
+                    spacing={0.5}
+                    sx={{ alignItems: 'center', mb: 1 }}
+                  >
+                    <WarningAmberIcon fontSize="small" color="warning" />
+                    <Typography variant="body2" color="warning.main">
+                      {carga.memberName}: {formatDuration(carga.minutes)} de tarefas para{' '}
+                      {formatDuration(carga.freeMinutes)} livres
+                      {carga.semEstimativa > 0 &&
+                        ' — ' + carga.semEstimativa + ' sem estimativa não entram na conta'}
+                    </Typography>
+                  </Stack>
+                ))}
 
                 <Divider sx={{ mb: 1.5 }} />
 

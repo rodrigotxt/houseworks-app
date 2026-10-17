@@ -75,6 +75,7 @@ estar em várias casas.
 | `user`, `household` | par **único** (índice `{user, household}`) |
 | `role` | `owner` \| `adult` \| `child` |
 | `overrides` | sobreposições pontuais de capacidade; **omitido na serialização** |
+| `freeTime` | tempo livre por dia para as tarefas; `null` = nunca configurado (D34) |
 | `joinedAt` | define a ordem do rodízio de responsáveis |
 
 **Invariante central:** as capacidades efetivas são **sempre derivadas** de `role` + `overrides`

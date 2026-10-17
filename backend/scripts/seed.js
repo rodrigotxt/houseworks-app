@@ -31,6 +31,16 @@ const FAMILY = [
 ];
 
 // A recorrencia comeca hoje: a agenda olha para a frente, nao para tras.
+// Domingo primeiro. Os adultos tem mais folga no fim de semana; as criancas, o mesmo
+// todos os dias.
+const TEMPO_LIVRE = {
+  rodrigo: { mode: 'por_dia', byWeekday: [180, 120, 120, 120, 120, 120, 240] },
+  geissiane: { mode: 'por_dia', byWeekday: [180, 120, 120, 120, 120, 120, 240] },
+  arthur: { mode: 'fixo', fixedMinutes: 90 },
+  isabella: { mode: 'fixo', fixedMinutes: 90 },
+  gabryel: { mode: 'fixo', fixedMinutes: 90 },
+};
+
 function tasksFor(today) {
   return [
     {
@@ -127,6 +137,9 @@ async function importData() {
       user: usersByUsername[member.username]._id,
       household: household._id,
       role: member.role,
+      // Tempo livre para as tarefas. Folgado de proposito: o seed existe para mostrar a
+      // casa funcionando, e um aviso de carga em todo dia nao ensinaria nada.
+      freeTime: TEMPO_LIVRE[member.username],
     });
   }
 

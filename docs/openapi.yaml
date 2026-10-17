@@ -1928,6 +1928,49 @@ components:
         joinedAt:
           type: string
           format: date-time
+        freeTime:
+          description: |
+            Quanto tempo a pessoa tem livre para as tarefas da casa. `null` significa **nunca
+            configurado** — que é diferente de zero: quem está `null` fica fora do aviso de carga,
+            quem tem zero tem um aviso legítimo.
+          oneOf:
+            - $ref: '#/components/schemas/FreeTime'
+            - type: 'null'
+
+    FreeTime:
+      type: object
+      description: |
+        Quanto tempo a pessoa tem livre para executar as tarefas da casa. É uma configuração
+        semanal que se repete — não muda por data.
+
+        Um dia sem valor é **zero**: marcar é o que dá tempo livre.
+      required: [mode]
+      properties:
+        mode:
+          type: string
+          enum: [fixo, por_dia]
+          description: '`fixo` usa `fixedMinutes` em todos os dias. `por_dia` usa `byWeekday`.'
+          example: por_dia
+        fixedMinutes:
+          description: 'Minutos livres, iguais em todos os dias. Só é usado com `mode: fixo`.'
+          oneOf:
+            - type: integer
+              minimum: 0
+              maximum: 1440
+            - type: 'null'
+          example: 120
+        byWeekday:
+          type: array
+          description: |
+            Sete posições, **domingo primeiro** (0 a 6), em minutos. Só é usado com `mode: por_dia`.
+            Posição ausente vale zero.
+          minItems: 7
+          maxItems: 7
+          items:
+            type: integer
+            minimum: 0
+            maximum: 1440
+          example: [0, 60, 60, 60, 60, 60, 240]
 
     InviteCode:
       type: object
@@ -2101,6 +2144,14 @@ components:
             difficulty:
               type: string
               enum: [muito_facil, facil, medio, dificil, muito_dificil]
+            estimatedMinutes:
+              description: |
+                Estimativa de tempo da tarefa, em minutos. `null` = não estimado.
+              oneOf:
+                - type: integer
+                  minimum: 1
+                  maximum: 1440
+                - type: 'null'
         dueDate:
           type: string
           format: date
@@ -2544,6 +2595,14 @@ components:
               type: boolean
             canManageMembers:
               type: boolean
+        freeTime:
+          description: |
+            Tempo livre da pessoa. `null` **limpa** a configuração, voltando ao estado "nunca
+            configurado" — que é diferente de mandar tudo zero, porque zero gera aviso de carga
+            e `null` não.
+          oneOf:
+            - $ref: '#/components/schemas/FreeTime'
+            - type: 'null'
 
     CreateMemberRequest:
       type: object

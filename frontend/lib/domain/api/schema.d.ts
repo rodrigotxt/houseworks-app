@@ -862,6 +862,45 @@ export interface components {
             };
             /** Format: date-time */
             joinedAt: string;
+            /**
+             * @description Quanto tempo a pessoa tem livre para as tarefas da casa. `null` significa **nunca
+             *     configurado** — que é diferente de zero: quem está `null` fica fora do aviso de carga,
+             *     quem tem zero tem um aviso legítimo.
+             */
+            freeTime?: components["schemas"]["FreeTime"] | null;
+        };
+        /**
+         * @description Quanto tempo a pessoa tem livre para executar as tarefas da casa. É uma configuração
+         *     semanal que se repete — não muda por data.
+         *
+         *     Um dia sem valor é **zero**: marcar é o que dá tempo livre.
+         */
+        FreeTime: {
+            /**
+             * @description `fixo` usa `fixedMinutes` em todos os dias. `por_dia` usa `byWeekday`.
+             * @example por_dia
+             * @enum {string}
+             */
+            mode: "fixo" | "por_dia";
+            /**
+             * @description Minutos livres, iguais em todos os dias. Só é usado com `mode: fixo`.
+             * @example 120
+             */
+            fixedMinutes?: number | null;
+            /**
+             * @description Sete posições, **domingo primeiro** (0 a 6), em minutos. Só é usado com `mode: por_dia`.
+             *     Posição ausente vale zero.
+             * @example [
+             *       0,
+             *       60,
+             *       60,
+             *       60,
+             *       60,
+             *       60,
+             *       240
+             *     ]
+             */
+            byWeekday?: number[];
         };
         InviteCode: {
             /** @example MARTINS-7K2Q */
@@ -988,6 +1027,8 @@ export interface components {
                 name?: string;
                 /** @enum {string} */
                 difficulty?: "muito_facil" | "facil" | "medio" | "dificil" | "muito_dificil";
+                /** @description Estimativa de tempo da tarefa, em minutos. `null` = não estimado. */
+                estimatedMinutes?: number | null;
             };
             /**
              * Format: date
@@ -1269,6 +1310,12 @@ export interface components {
                 canManageTasks?: boolean;
                 canManageMembers?: boolean;
             };
+            /**
+             * @description Tempo livre da pessoa. `null` **limpa** a configuração, voltando ao estado "nunca
+             *     configurado" — que é diferente de mandar tudo zero, porque zero gera aviso de carga
+             *     e `null` não.
+             */
+            freeTime?: components["schemas"]["FreeTime"] | null;
         };
         CreateMemberRequest: {
             /** @example Arthur Soares Martins */

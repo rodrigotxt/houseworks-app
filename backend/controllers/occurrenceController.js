@@ -24,7 +24,9 @@ const OCCURRENCE_SORT_FIELDS = ['dueDate', 'createdAt', 'status'];
 
 // O contrato expoe task, assignedTo e completedBy como objetos, nao como ids soltos.
 const OCCURRENCE_POPULATE = [
-  { path: 'task', select: 'name difficulty' },
+  // estimatedMinutes entra aqui para a agenda comparar a carga do dia com o tempo livre
+  // de cada pessoa sem uma segunda chamada por tarefa.
+  { path: 'task', select: 'name difficulty estimatedMinutes' },
   { path: 'assignedTo', select: 'name username' },
   { path: 'completedBy', select: 'name username' },
 ];

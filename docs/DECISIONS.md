@@ -78,6 +78,41 @@ O ajuste que isso exigiu no cliente também vale como aviso: a Server Action de 
 desestrutura os campos um a um, então um campo novo esquecido nessa lista **some sem erro
 nenhum** — o formulário parece não salvar. Criar passava (o corpo vai inteiro), editar não.
 
+### D34 — Tempo livre é configuração semanal, e `null` não é zero
+
+**Contexto.** A casa não tinha como responder "cabe tudo no sábado?". O membro sabia o que
+**pode** fazer (capacidades), não quanto tempo **tem** para fazer.
+
+**Decisão.** `Membership.freeTime`, com dois modos: `fixo` (um valor para todos os dias) e
+`por_dia` (sete valores, domingo primeiro). Editável na modal *Papel e permissões*, por quem já
+administra a casa — a rota é a mesma que muda papel e capacidades.
+
+**A decisão que mais importa: `null` ≠ `0`.**
+
+- `null` = a pessoa **nunca configurou**. Fica fora do aviso de carga.
+- `0` = configurado, **sem tempo** naquele dia. Gera aviso legítimo.
+
+Sem essa distinção, todo membro nasceria com zero e a casa inteira apareceria "estourando" o
+tempo livre no primeiro dia — um aviso que ninguém pediu, sobre um dado que ninguém informou.
+Seria a maneira mais rápida de ensinar todo mundo a ignorar o aviso.
+
+**Descartado.**
+
+- **Guardar só os sete valores**, deixando o modo como detalhe de tela. Reabrir a modal
+  mostraria "por dia" com os sete iguais, perdendo a intenção de quem escolheu "o mesmo todos
+  os dias".
+- **Bloquear** a atribuição que passa do tempo livre. Numa casa as pessoas fazem o que dá;
+  transformar isso em `403` criaria uma briga com o sistema no meio de uma tarefa.
+- **Dia em branco herdando o valor dos outros**. Seria adivinhação: quem não marcou domingo
+  pode ter querido dizer que domingo não tem folga. Branco é zero, e a tela diz isso.
+
+**Consequência.** A regra vive em dois lugares, igual nos dois: `backend/utils/freeTime.js` e
+`lib/domain/freeTime.ts` — este último para a agenda comparar sem uma ida à API por dia. O
+aviso aparece na agenda, por dia, só para quem passa do próprio tempo.
+
+O aviso conta apenas tarefas **com estimativa** (D33) e diz na tela quantas ficaram de fora.
+Um aviso que somasse zero para tarefa sem estimativa mentiria para menos, em silêncio.
+
 ---
 
 ## B. Tempo e recorrência

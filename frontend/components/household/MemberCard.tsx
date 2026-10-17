@@ -33,7 +33,15 @@ import Typography from '@mui/material/Typography';
 import { leaveHousehold, removeMember, saveMember } from '@/app/(app)/household/actions';
 import type { Membership } from '@/lib/domain/api/types';
 import { formatInstant } from '@/lib/domain/dates';
-import { CAPABILITY_LABELS, ROLE_HINTS, ROLE_LABELS } from '@/lib/domain/labels';
+import {
+  DIAS_NA_SEMANA,
+  SEMANA_VAZIA,
+  hoursTextToMinutes,
+  minutesToHoursText,
+  type FreeTime,
+  type FreeTimeMode,
+} from '@/lib/domain/freeTime';
+import { CAPABILITY_LABELS, ROLE_HINTS, ROLE_LABELS, WEEKDAY_SHORT } from '@/lib/domain/labels';
 import {
   CAPABILITIES,
   ROLE_CAPABILITIES,
@@ -60,6 +68,18 @@ function iniciais(nome: string): string {
   return (partes[0][0] + partes[partes.length - 1][0]).toUpperCase();
 }
 
+/** Sete textos de hora, domingo primeiro, a partir do que veio da API. */
+function semanaEmHoras(freeTime: Membership['freeTime']): string[] {
+  return Array.from({ length: DIAS_NA_SEMANA }, (_, dia) => {
+    if (!freeTime) return '0';
+
+    const minutos =
+      freeTime.mode === 'fixo' ? (freeTime.fixedMinutes ?? 0) : (freeTime.byWeekday?.[dia] ?? 0);
+
+    return minutesToHoursText(minutos);
+  });
+}
+
 export default function MemberCard({
   member,
   timeZone,
@@ -78,6 +98,12 @@ export default function MemberCard({
   const [papel, setPapel] = useState<Role>(member.role);
   const [permissoes, setPermissoes] = useState<Record<Capability, boolean>>(member.capabilities);
 
+  // null = nunca configurado, que e diferente de zero (zero gera aviso de carga).
+  const [temTempoLivre, setTemTempoLivre] = useState(member.freeTime != null);
+  const [modoTempo, setModoTempo] = useState<FreeTimeMode>(member.freeTime?.mode ?? 'fixo');
+  const [horasFixo, setHorasFixo] = useState(minutesToHoursText(member.freeTime?.fixedMinutes ?? 0));
+  const [horasPorDia, setHorasPorDia] = useState<string[]>(semanaEmHoras(member.freeTime));
+
   const ajustado = hasAdjustedCapabilities(member);
   const semPermissoes = CAPABILITIES.every((capacidade) => !member.capabilities[capacidade]);
 
@@ -89,7 +115,40 @@ export default function MemberCard({
     setErro(null);
     setPapel(member.role);
     setPermissoes(member.capabilities);
+    setTemTempoLivre(member.freeTime != null);
+    setModoTempo(member.freeTime?.mode ?? 'fixo');
+    setHorasFixo(minutesToHoursText(member.freeTime?.fixedMinutes ?? 0));
+    setHorasPorDia(semanaEmHoras(member.freeTime));
     setEditando(true);
+  }
+
+  // Ao trocar para "por dia" com tudo zerado, comeca com o valor fixo em todos os dias:
+  // e o que a pessoa quis dizer, e evita redigitar sete vezes.
+  function trocarModoTempo(novo: FreeTimeMode) {
+    setModoTempo(novo);
+
+    const tudoZero = horasPorDia.every((hora) => hoursTextToMinutes(hora) === 0);
+    if (novo === 'por_dia' && tudoZero && hoursTextToMinutes(horasFixo) > 0) {
+      setHorasPorDia(Array(DIAS_NA_SEMANA).fill(horasFixo));
+    }
+  }
+
+  function tempoLivreParaSalvar(): FreeTime | null {
+    if (!temTempoLivre) return null;
+
+    if (modoTempo === 'fixo') {
+      return {
+        mode: 'fixo',
+        fixedMinutes: hoursTextToMinutes(horasFixo),
+        byWeekday: [...SEMANA_VAZIA],
+      };
+    }
+
+    return {
+      mode: 'por_dia',
+      fixedMinutes: null,
+      byWeekday: horasPorDia.map(hoursTextToMinutes),
+    };
   }
 
   function trocarPapel(novo: Role) {
@@ -103,7 +162,7 @@ export default function MemberCard({
     setErro(null);
 
     iniciar(async () => {
-      const resultado = await saveMember(member.user.id, papel, permissoes);
+      const resultado = await saveMember(member.user.id, papel, permissoes, tempoLivreParaSalvar());
 
       if (resultado.status === 'error') {
         setErro(resultado.message ?? null);
@@ -284,6 +343,89 @@ export default function MemberCard({
               />
             ))}
           </Stack>
+
+          <Divider sx={{ my: 2 }} />
+
+          <Typography variant="subtitle2" sx={{ mb: 0.5 }}>
+            Tempo livre para as tarefas
+          </Typography>
+
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+            Quanto tempo a pessoa tem por dia para fazer as tarefas da casa. Serve para avisar
+            quando o dia passa do tempo disponível — não bloqueia nada.
+          </Typography>
+
+          <FormControlLabel
+            control={
+              <Switch
+                checked={temTempoLivre}
+                onChange={(evento) => setTemTempoLivre(evento.target.checked)}
+                disabled={pendente}
+              />
+            }
+            label="Definir tempo livre"
+          />
+
+          {temTempoLivre && (
+            <Box sx={{ mt: 1 }}>
+              <TextField
+                select
+                fullWidth
+                size="small"
+                label="Como informar"
+                value={modoTempo}
+                onChange={(evento) => trocarModoTempo(evento.target.value as FreeTimeMode)}
+                disabled={pendente}
+                sx={{ mb: 2 }}
+              >
+                <MenuItem value="fixo">O mesmo todos os dias</MenuItem>
+                <MenuItem value="por_dia">Diferente por dia da semana</MenuItem>
+              </TextField>
+
+              {modoTempo === 'fixo' ? (
+                <TextField
+                  label="Horas por dia"
+                  type="number"
+                  size="small"
+                  value={horasFixo}
+                  onChange={(evento) => setHorasFixo(evento.target.value)}
+                  inputProps={{ min: 0, max: 24, step: 0.5 }}
+                  helperText="Em horas. Meia hora é 0.5."
+                  disabled={pendente}
+                  sx={{ width: 200 }}
+                />
+              ) : (
+                <Stack spacing={1}>
+                  {WEEKDAY_SHORT.map((rotulo, dia) => (
+                    <Stack key={rotulo} direction="row" spacing={1} alignItems="center">
+                      <Typography variant="body2" sx={{ width: 36 }}>
+                        {rotulo}
+                      </Typography>
+                      <TextField
+                        type="number"
+                        size="small"
+                        value={horasPorDia[dia]}
+                        onChange={(evento) =>
+                          setHorasPorDia((atual) =>
+                            atual.map((valor, indice) => (indice === dia ? evento.target.value : valor))
+                          )
+                        }
+                        inputProps={{ min: 0, max: 24, step: 0.5, 'aria-label': 'Horas de ' + rotulo }}
+                        disabled={pendente}
+                        sx={{ width: 100 }}
+                      />
+                      <Typography variant="body2" color="text.secondary">
+                        h
+                      </Typography>
+                    </Stack>
+                  ))}
+                  <Typography variant="caption" color="text.secondary">
+                    Dia zerado significa sem tempo livre naquele dia.
+                  </Typography>
+                </Stack>
+              )}
+            </Box>
+          )}
         </DialogContent>
 
         <DialogActions>
