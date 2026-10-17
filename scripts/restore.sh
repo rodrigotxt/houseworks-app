@@ -1,8 +1,13 @@
 #!/usr/bin/env bash
 # scripts/restore.sh — ENSAIO de restauração, num banco descartável.
 #
-#   ./scripts/restore.sh                          # usa a cópia mais recente
-#   ./scripts/restore.sh caminho/para/copia.gz    # usa uma cópia específica
+#   ./scripts/restore.sh                          # a cópia local mais recente
+#   ./scripts/restore.sh caminho/para/copia.gz    # uma cópia específica
+#   ./scripts/restore.sh --remoto                 # baixa a mais recente do R2 e ensaia
+
+# O modo --remoto é o que o cron semanal usa, e é o mais forte dos três: prova que o
+# dado existe FORA da máquina e que volta. Ensaio com a cópia local só prova que o
+# dump foi bem escrito; não diz nada sobre a transferência.
 #
 # POR QUE ISTO EXISTE: backup que nunca foi restaurado não é backup, é esperança. Um
 # dump pode estar íntegro como arquivo e ainda assim ser inútil — arquivo truncado no
@@ -15,7 +20,16 @@
 
 set -euo pipefail
 
+# Mesma configuração do backup (destino remoto, caminhos).
+CONFIG_FILE="${HOUSEWORKS_BACKUP_CONFIG:-/etc/default/houseworks-backup}"
+if [ -f "$CONFIG_FILE" ]; then
+  # shellcheck disable=SC1090
+  set -a; . "$CONFIG_FILE"; set +a
+fi
+
 BACKUP_DIR="${BACKUP_DIR:-/var/backups/houseworks}"
+RCLONE_REMOTE="${RCLONE_REMOTE:-}"
+TEMPORARIO=""
 MONGO_CONTAINER="${MONGO_CONTAINER:-houseworks-mongodb-1}"
 HOUSEWORKS_ENV="${HOUSEWORKS_ENV:-/etc/komodo/stacks/houseworks/.env}"
 TEST_CONTAINER="hw-restore-test-$$"
@@ -24,12 +38,45 @@ IMAGEM="mongo:8.2"
 registrar() { printf '%s  %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*"; }
 erro() { registrar "FALHOU: $*"; exit 1; }
 
-limpar() { docker rm -f "$TEST_CONTAINER" >/dev/null 2>&1 || true; }
+limpar() {
+  docker rm -f "$TEST_CONTAINER" >/dev/null 2>&1 || true
+  [ -n "$TEMPORARIO" ] && rm -rf "$TEMPORARIO"
+  return 0
+}
 trap limpar EXIT
 
 # ---------------------------------------------------------------- arquivo
 
-arquivo="${1:-}"
+usar_remoto=0
+arquivo=""
+
+for arg in "$@"; do
+  case "$arg" in
+    --remoto) usar_remoto=1 ;;
+    -*) erro "opção desconhecida: $arg" ;;
+    *) arquivo="$arg" ;;
+  esac
+done
+
+if [ "$usar_remoto" = 1 ]; then
+  [ -n "$RCLONE_REMOTE" ] || erro "--remoto pedido, mas RCLONE_REMOTE está vazio."
+  command -v rclone >/dev/null || erro "o rclone não está instalado."
+
+  TEMPORARIO="$(mktemp -d)"
+  registrar "Buscando a cópia mais recente em $RCLONE_REMOTE."
+
+  # O nome carrega a data (AAAA-MM-DD_HHMMSS), então ordem alfabética é ordem
+  # cronológica — não é preciso confiar no mtime, que o copy não preserva.
+  ultima="$(rclone lsf "$RCLONE_REMOTE" --files-only \
+    | grep -E '^houseworks-.*\.archive\.gz$' | sort | tail -1)"
+  [ -n "$ultima" ] || erro "não há cópia em $RCLONE_REMOTE."
+
+  rclone copyto "$RCLONE_REMOTE/$ultima" "$TEMPORARIO/$ultima" --no-traverse \
+    || erro "não consegui baixar $ultima."
+
+  arquivo="$TEMPORARIO/$ultima"
+  registrar "Baixada do destino: $ultima"
+fi
 
 if [ -z "$arquivo" ]; then
   arquivo="$(find "$BACKUP_DIR" -maxdepth 1 -name 'houseworks-*.archive.gz' -type f | sort | tail -1)"

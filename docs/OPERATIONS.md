@@ -297,9 +297,13 @@ serviço avisa.
 ### O ensaio de restauração
 
 ```bash
-sudo /opt/houseworks-backup/restore.sh              # a cópia mais recente
+sudo /opt/houseworks-backup/restore.sh              # a cópia local mais recente
 sudo /opt/houseworks-backup/restore.sh arquivo.gz   # uma cópia específica
+sudo /opt/houseworks-backup/restore.sh --remoto     # baixa a mais recente do R2
 ```
+
+O cron semanal usa `--remoto`. A diferença importa: ensaiar a cópia **local** prova só que o
+dump foi bem escrito; ensaiar a que vem do bucket prova também que ela **chegou lá e volta**.
 
 Ele sobe um container **novo**, com volume próprio, restaura ali e confere:
 
@@ -326,6 +330,34 @@ docker compose -f docker-compose.proxy.yml start backend frontend
 
 `--drop` apaga cada coleção antes de recriar. Sem ele, o restore **soma** ao que já existe e
 duplica tudo. É o erro clássico de restauração.
+
+**Se o banco de destino tiver outro nome**, o dump não adivinha: é preciso remapear, senão os
+dados vão para uma database nova e a aplicação continua vendo a antiga, vazia.
+
+```bash
+docker exec -i mongodb mongorestore --archive --gzip --drop \
+  --nsFrom='houseworks.*' --nsTo='db_houseworks.*' \
+  --username "$MONGO_USER" --password "$MONGO_PASSWORD" --authenticationDatabase admin \
+  < copia.archive.gz
+```
+
+Em produção os dois nomes coincidem (`houseworks`), então o comando sem remapeamento está
+certo — foi assim que este parágrafo foi escrito e conferido.
+
+**Ensaio executado de verdade, em 2026-10-17.** A cópia de produção foi restaurada por cima do
+banco de desenvolvimento, com o procedimento acima e cronometrada:
+
+| Etapa | Tempo |
+|---|---|
+| parar backend e frontend | 1,4 s |
+| `mongorestore` (113 documentos) | 2,0 s |
+| subir de novo | 1,5 s |
+| **total de indisponibilidade** | **4,8 s** |
+
+Os índices voltaram sozinhos (`user_1_household_1` entre eles), a API respondeu `200` e o
+login recusou credencial inválida com `401` em vez de quebrar. O banco de desenvolvimento foi
+recriado com `make seed` depois. O tamanho cresce com o uso, mas a ordem de grandeza é esta: a
+janela de manutenção é de segundos, não de minutos.
 
 ### Conferir
 

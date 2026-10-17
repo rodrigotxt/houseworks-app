@@ -82,9 +82,10 @@ PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 # Backup diário do MongoDB do HouseWorks.
 $HORARIO root $DESTINO/backup.sh >> /var/log/houseworks-backup.log 2>&1
 
-# Ensaio de restauração semanal, no domingo: restaura a última cópia num banco
-# descartável e confere. Sem isto, "o backup está rodando" é uma suposição.
-0 5 * * 0 root $DESTINO/restore.sh >> /var/log/houseworks-restore.log 2>&1
+# Ensaio de restauração semanal, no domingo, com --remoto: baixa a cópia mais recente
+# do bucket e restaura num banco descartável. Testar a cópia LOCAL provaria só que o
+# dump foi bem escrito; testar a do bucket prova também que ela chegou lá e volta.
+0 5 * * 0 root $DESTINO/restore.sh --remoto >> /var/log/houseworks-restore.log 2>&1
 CRON_EOF
 chmod 644 "$CRON"
 echo "Agendamento instalado em $CRON."
