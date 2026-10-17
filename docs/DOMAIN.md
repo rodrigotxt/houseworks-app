@@ -75,6 +75,7 @@ estar em várias casas.
 | `user`, `household` | par **único** (índice `{user, household}`) |
 | `role` | `owner` \| `adult` \| `child` |
 | `overrides` | sobreposições pontuais de capacidade; **omitido na serialização** |
+| `freeTime` | tempo livre por dia para as tarefas; `null` = nunca configurado (D34) |
 | `joinedAt` | define a ordem do rodízio de responsáveis |
 
 **Invariante central:** as capacidades efetivas são **sempre derivadas** de `role` + `overrides`
@@ -100,6 +101,7 @@ retorna `409 LAST_OWNER_CANNOT_LEAVE`.
 | `recurrence` | a regra (ver §3) |
 | `difficulty` | `muito_facil`…`muito_dificil` |
 | `points` | derivado da dificuldade, sobreponível |
+| `estimatedMinutes` | quanto tempo leva, em minutos; `null` = não estimado. **Nenhuma regra depende dele** (D33) |
 | `assignmentStrategy` | `fixed` (usa `assignedTo`) \| `rotate` (rodízio) |
 | `assignedTo` | responsável fixo; `null` = qualquer membro |
 | `status` | `active` \| `archived` |
@@ -143,6 +145,8 @@ da mesma tarefa no mesmo dia — é isso que permite rodar o gerador quantas vez
 | `note` | comentário de quem **executou** |
 | `rating` (1–5), `ratedBy`, `ratedAt`, `ratingNote` | nota e comentário de quem **avaliou** |
 | `points` | cópia dos pontos da ocorrência na conclusão |
+| `estimatedMinutes` | cópia da estimativa da tarefa na conclusão; `null` = não tinha |
+| `actualMinutes` | tempo medido, **só** quando informado; `null` = não informado (D36) |
 
 **Invariantes:**
 - Só existe execução ligada a uma ocorrência.

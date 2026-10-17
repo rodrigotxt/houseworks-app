@@ -9,7 +9,9 @@
     "lint": "next lint",
     "gen:api": "node scripts/generate-api-types.mjs",
     "gen:icons": "node scripts/generate-icons.mjs",
-    "test:spatial": "node --test lib/device/spatial.test.ts"
+    "test:spatial": "node --test lib/device/spatial.test.ts",
+    "test:domain": "node --test lib/domain/format.test.ts lib/domain/freeTime.test.ts",
+    "test:front": "npm run test:domain && npm run test:spatial"
   },
   "dependencies": {
     "@emotion/cache": "^11.14.0",

@@ -856,6 +856,13 @@ paths:
           in: query
           schema:
             type: string
+        - name: taskId
+          in: query
+          description: |
+            Só as execuções desta tarefa. É o que permite comparar o tempo estimado com o real de
+            uma tarefa específica sem baixar o histórico inteiro da casa.
+          schema:
+            type: string
         - name: pendingReviewForMe
           in: query
           description: Quando `true`, devolve apenas execuções que o usuário autenticado pode avaliar (fila de conferência).
@@ -1928,6 +1935,49 @@ components:
         joinedAt:
           type: string
           format: date-time
+        freeTime:
+          description: |
+            Quanto tempo a pessoa tem livre para as tarefas da casa. `null` significa **nunca
+            configurado** — que é diferente de zero: quem está `null` fica fora do aviso de carga,
+            quem tem zero tem um aviso legítimo.
+          oneOf:
+            - $ref: '#/components/schemas/FreeTime'
+            - type: 'null'
+
+    FreeTime:
+      type: object
+      description: |
+        Quanto tempo a pessoa tem livre para executar as tarefas da casa. É uma configuração
+        semanal que se repete — não muda por data.
+
+        Um dia sem valor é **zero**: marcar é o que dá tempo livre.
+      required: [mode]
+      properties:
+        mode:
+          type: string
+          enum: [fixo, por_dia]
+          description: '`fixo` usa `fixedMinutes` em todos os dias. `por_dia` usa `byWeekday`.'
+          example: por_dia
+        fixedMinutes:
+          description: 'Minutos livres, iguais em todos os dias. Só é usado com `mode: fixo`.'
+          oneOf:
+            - type: integer
+              minimum: 0
+              maximum: 1440
+            - type: 'null'
+          example: 120
+        byWeekday:
+          type: array
+          description: |
+            Sete posições, **domingo primeiro** (0 a 6), em minutos. Só é usado com `mode: por_dia`.
+            Posição ausente vale zero.
+          minItems: 7
+          maxItems: 7
+          items:
+            type: integer
+            minimum: 0
+            maximum: 1440
+          example: [0, 60, 60, 60, 60, 60, 240]
 
     InviteCode:
       type: object
@@ -2023,6 +2073,16 @@ components:
             Pontos creditados quando a execução é aprovada. Derivado da dificuldade por padrão
             (`muito_facil`=1, `facil`=2, `medio`=3, `dificil`=5, `muito_dificil`=8), sobreponível.
           example: 5
+        estimatedMinutes:
+          description: |
+            Quanto tempo a tarefa costuma levar, em minutos. `null` = não estimado. É um dado de
+            conveniência para a casa (planejar o dia), não uma regra: `null` nunca impede nada.
+          oneOf:
+            - type: integer
+              minimum: 1
+              maximum: 1440
+            - type: 'null'
+          example: 30
         assignedTo:
           description: |
             Responsável fixo. `null` significa "qualquer membro pode assumir" — nesse caso cada
@@ -2091,6 +2151,14 @@ components:
             difficulty:
               type: string
               enum: [muito_facil, facil, medio, dificil, muito_dificil]
+            estimatedMinutes:
+              description: |
+                Estimativa de tempo da tarefa, em minutos. `null` = não estimado.
+              oneOf:
+                - type: integer
+                  minimum: 1
+                  maximum: 1440
+                - type: 'null'
         dueDate:
           type: string
           format: date
@@ -2168,6 +2236,30 @@ components:
               maxLength: 500
             - type: 'null'
           example: Banheiro limpo e brilhando!
+        estimatedMinutes:
+          description: |
+            Estimativa que a tarefa tinha **no momento da conclusão**. É cópia, como `points`:
+            mudar a tarefa depois não reescreve o que já aconteceu. `null` = a tarefa não tinha
+            estimativa.
+          oneOf:
+            - type: integer
+              minimum: 1
+              maximum: 1440
+            - type: 'null'
+          example: 45
+        actualMinutes:
+          description: |
+            Quanto levou de verdade, em minutos — **só quando quem concluiu informou**.
+
+            `null` significa "não informado", e quem consome deve tratar `actualMinutes ??
+            estimatedMinutes` como o tempo considerado. Guardar o valor presumido aqui apagaria a
+            diferença entre medido e chutado, que é justamente o que dá valor ao campo.
+          oneOf:
+            - type: integer
+              minimum: 0
+              maximum: 1440
+            - type: 'null'
+          example: 52
         status:
           type: string
           enum: [pending_review, approved, auto_approved]
@@ -2534,6 +2626,14 @@ components:
               type: boolean
             canManageMembers:
               type: boolean
+        freeTime:
+          description: |
+            Tempo livre da pessoa. `null` **limpa** a configuração, voltando ao estado "nunca
+            configurado" — que é diferente de mandar tudo zero, porque zero gera aviso de carga
+            e `null` não.
+          oneOf:
+            - $ref: '#/components/schemas/FreeTime'
+            - type: 'null'
 
     CreateMemberRequest:
       type: object
@@ -2606,6 +2706,15 @@ components:
           minimum: 0
           maximum: 100
           description: Opcional. Sem ele, deriva da dificuldade.
+        estimatedMinutes:
+          description: |
+            Opcional. Quanto tempo a tarefa leva, em minutos. `null` ou omitido = não estimado.
+          oneOf:
+            - type: integer
+              minimum: 1
+              maximum: 1440
+            - type: 'null'
+          example: 30
         assignedTo:
           type: string
           description: ID do membro responsável. Omitido ou `null` = qualquer um pode assumir.
@@ -2639,6 +2748,16 @@ components:
           type: integer
           minimum: 0
           maximum: 100
+        estimatedMinutes:
+          description: |
+            Quanto tempo a tarefa costuma levar, em minutos. `null` = não estimado. É um dado de
+            conveniência para a casa (planejar o dia), não uma regra: `null` nunca impede nada.
+          oneOf:
+            - type: integer
+              minimum: 1
+              maximum: 1440
+            - type: 'null'
+          example: 30
         assignedTo:
           oneOf:
             - type: string
@@ -2665,6 +2784,15 @@ components:
             Momento da execução. Default é o instante do servidor. Só é aceito dentro de uma janela
             curta no passado (registro retroativo de quem esqueceu de marcar).
           example: '2025-07-05T18:30:00Z'
+        actualMinutes:
+          description: |
+            Quanto tempo a tarefa levou, em minutos. **Opcional**: em branco, vale a estimativa
+            que a tarefa tem. Fica gravado como `null` quando não foi informado, para não
+            confundir tempo medido com tempo presumido.
+          type: integer
+          minimum: 0
+          maximum: 1440
+          example: 52
 
     SkipOccurrenceRequest:
       type: object

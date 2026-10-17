@@ -193,6 +193,15 @@ executa.
 `clone_path` e `run_directory` ficam **vazios** de propósito: o padrão já é o diretório do
 repositório clonado, e é lá que o `Caddyfile` está para ser montado pelo compose.
 
+> **Só `main` dispara deploy.** O Komodo compara a branch do push com a configurada na Stack e
+> ignora as outras. Verificado: um push em `develop` não recriou nenhum container. É o que
+> permite trabalhar sem tocar em produção — o fluxo está descrito em **Fluxo de branches**, no
+> [README](../README.md).
+
+> **O webhook precisa de `webhook_force_deploy: true`.** Sem essa flag o Komodo só dispara
+> quando o push mexe nos arquivos que o Stack usa, e um commit que não toque neles seria
+> silenciosamente ignorado.
+
 ### Os segredos saem do arquivo
 
 Em vez de manter `MONGO_PASSWORD` e `JWT_SECRET_KEY` em texto no `.env.prod` da VPS, crie-os em

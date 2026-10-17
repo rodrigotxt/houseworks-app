@@ -12,6 +12,7 @@ const ApiError = require('../utils/apiError');
 const ErrorCode = require('../utils/errorCodes');
 const { ok, created, noContent } = require('../utils/respond');
 const { generateInviteCode, inviteExpiry } = require('../utils/inviteCode');
+const { normalizeFreeTime } = require('../utils/freeTime');
 
 // A casa nao pode ficar sem owner: sem isso ninguem consegue administra-la.
 async function ensureNotLastOwner(householdId) {
@@ -248,7 +249,7 @@ exports.createMember = async (req, res) => {
 // @route   PATCH /api/v1/households/:householdId/members/:userId
 // @access  Owner
 exports.updateMember = async (req, res) => {
-  const { role, capabilities } = req.body;
+  const { role, capabilities, freeTime } = req.body;
 
   const membership = await Membership.findOne({
     household: req.household._id,
@@ -270,6 +271,12 @@ exports.updateMember = async (req, res) => {
 
   if (capabilities) {
     membership.set('overrides', Object.assign({}, membership.overrides, capabilities));
+  }
+
+  // null aqui e o que LIMPA a configuracao, voltando ao estado "nunca configurado".
+  // E diferente de mandar tudo zero: zero gera aviso de carga, null nao.
+  if (freeTime !== undefined) {
+    membership.freeTime = freeTime === null ? null : normalizeFreeTime(freeTime);
   }
 
   await membership.save();

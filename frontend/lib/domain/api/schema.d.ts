@@ -99,7 +99,21 @@ export interface paths {
         put?: never;
         /**
          * Renovar token
-         * @description Emite um novo JWT a partir de uma sessão ainda válida e renova o cookie.
+         * @description Emite um novo JWT e renova o cookie, **rotacionando**: o token apresentado é revogado.
+         *     Uma sessão renovada não deixa dois tokens válidos circulando.
+         *
+         *     É a **única rota que aceita um token já expirado**. Em todas as outras, expirado é
+         *     sessão encerrada (`TOKEN_EXPIRED`). Aqui, um token expirado há pouco é exatamente o
+         *     caso a atender — exigir um token válido para renovar tornaria a renovação impossível
+         *     justamente quando ela é necessária.
+         *
+         *     O limite é a **janela de sessão** (`SESSION_MAX_AGE`, 30 dias por padrão): passado
+         *     esse tempo desde a expiração, a resposta é `TOKEN_EXPIRED` e é preciso entrar de
+         *     novo. Sem esse teto, um token vazado renovaria para sempre.
+         *
+         *     O **cookie** acompanha a sessão, e não o token: ele dura `SESSION_MAX_AGE`, e o
+         *     token dentro dele continua curto (`JWT_EXPIRES_IN`). Descartar o cookie junto com o
+         *     token deixaria a renovação sem nada para apresentar.
          */
         post: operations["refreshToken"];
         delete?: never;
@@ -848,6 +862,45 @@ export interface components {
             };
             /** Format: date-time */
             joinedAt: string;
+            /**
+             * @description Quanto tempo a pessoa tem livre para as tarefas da casa. `null` significa **nunca
+             *     configurado** — que é diferente de zero: quem está `null` fica fora do aviso de carga,
+             *     quem tem zero tem um aviso legítimo.
+             */
+            freeTime?: components["schemas"]["FreeTime"] | null;
+        };
+        /**
+         * @description Quanto tempo a pessoa tem livre para executar as tarefas da casa. É uma configuração
+         *     semanal que se repete — não muda por data.
+         *
+         *     Um dia sem valor é **zero**: marcar é o que dá tempo livre.
+         */
+        FreeTime: {
+            /**
+             * @description `fixo` usa `fixedMinutes` em todos os dias. `por_dia` usa `byWeekday`.
+             * @example por_dia
+             * @enum {string}
+             */
+            mode: "fixo" | "por_dia";
+            /**
+             * @description Minutos livres, iguais em todos os dias. Só é usado com `mode: fixo`.
+             * @example 120
+             */
+            fixedMinutes?: number | null;
+            /**
+             * @description Sete posições, **domingo primeiro** (0 a 6), em minutos. Só é usado com `mode: por_dia`.
+             *     Posição ausente vale zero.
+             * @example [
+             *       0,
+             *       60,
+             *       60,
+             *       60,
+             *       60,
+             *       60,
+             *       240
+             *     ]
+             */
+            byWeekday?: number[];
         };
         InviteCode: {
             /** @example MARTINS-7K2Q */
@@ -924,6 +977,12 @@ export interface components {
              */
             points: number;
             /**
+             * @description Quanto tempo a tarefa costuma levar, em minutos. `null` = não estimado. É um dado de
+             *     conveniência para a casa (planejar o dia), não uma regra: `null` nunca impede nada.
+             * @example 30
+             */
+            estimatedMinutes?: number | null;
+            /**
              * @description Responsável fixo. `null` significa "qualquer membro pode assumir" — nesse caso cada
              *     ocorrência nasce sem responsável.
              */
@@ -968,6 +1027,8 @@ export interface components {
                 name?: string;
                 /** @enum {string} */
                 difficulty?: "muito_facil" | "facil" | "medio" | "dificil" | "muito_dificil";
+                /** @description Estimativa de tempo da tarefa, em minutos. `null` = não estimado. */
+                estimatedMinutes?: number | null;
             };
             /**
              * Format: date
@@ -1018,6 +1079,22 @@ export interface components {
              * @example Banheiro limpo e brilhando!
              */
             note?: string | null;
+            /**
+             * @description Estimativa que a tarefa tinha **no momento da conclusão**. É cópia, como `points`:
+             *     mudar a tarefa depois não reescreve o que já aconteceu. `null` = a tarefa não tinha
+             *     estimativa.
+             * @example 45
+             */
+            estimatedMinutes?: number | null;
+            /**
+             * @description Quanto levou de verdade, em minutos — **só quando quem concluiu informou**.
+             *
+             *     `null` significa "não informado", e quem consome deve tratar `actualMinutes ??
+             *     estimatedMinutes` como o tempo considerado. Guardar o valor presumido aqui apagaria a
+             *     diferença entre medido e chutado, que é justamente o que dá valor ao campo.
+             * @example 52
+             */
+            actualMinutes?: number | null;
             /**
              * @description `pending_review` aguardando avaliação · `approved` avaliada por outro membro ·
              *     `auto_approved` a janela de avaliação expirou sem que ninguém avaliasse.
@@ -1249,6 +1326,12 @@ export interface components {
                 canManageTasks?: boolean;
                 canManageMembers?: boolean;
             };
+            /**
+             * @description Tempo livre da pessoa. `null` **limpa** a configuração, voltando ao estado "nunca
+             *     configurado" — que é diferente de mandar tudo zero, porque zero gera aviso de carga
+             *     e `null` não.
+             */
+            freeTime?: components["schemas"]["FreeTime"] | null;
         };
         CreateMemberRequest: {
             /** @example Arthur Soares Martins */
@@ -1299,6 +1382,11 @@ export interface components {
             /** @description Opcional. Sem ele, deriva da dificuldade. */
             points?: number;
             /**
+             * @description Opcional. Quanto tempo a tarefa leva, em minutos. `null` ou omitido = não estimado.
+             * @example 30
+             */
+            estimatedMinutes?: number | null;
+            /**
              * @description ID do membro responsável. Omitido ou `null` = qualquer um pode assumir.
              * @example 66f1a2b3c4d5e6f7a8b9c0d4
              */
@@ -1320,6 +1408,12 @@ export interface components {
             /** @enum {string} */
             difficulty?: "muito_facil" | "facil" | "medio" | "dificil" | "muito_dificil";
             points?: number;
+            /**
+             * @description Quanto tempo a tarefa costuma levar, em minutos. `null` = não estimado. É um dado de
+             *     conveniência para a casa (planejar o dia), não uma regra: `null` nunca impede nada.
+             * @example 30
+             */
+            estimatedMinutes?: number | null;
             assignedTo?: string | null;
             /** @enum {string} */
             assignmentStrategy?: "fixed" | "rotate";
@@ -1339,6 +1433,13 @@ export interface components {
              * @example 2025-07-05T18:30:00Z
              */
             completionDate?: string;
+            /**
+             * @description Quanto tempo a tarefa levou, em minutos. **Opcional**: em branco, vale a estimativa
+             *     que a tarefa tem. Fica gravado como `null` quando não foi informado, para não
+             *     confundir tempo medido com tempo presumido.
+             * @example 52
+             */
+            actualMinutes?: number;
         };
         SkipOccurrenceRequest: {
             /** @example Viajamos no fim de semana. */
@@ -2194,6 +2295,11 @@ export interface operations {
                 to?: components["parameters"]["ToDate"];
                 status?: "pending_review" | "approved" | "auto_approved";
                 executedBy?: string;
+                /**
+                 * @description Só as execuções desta tarefa. É o que permite comparar o tempo estimado com o real de
+                 *     uma tarefa específica sem baixar o histórico inteiro da casa.
+                 */
+                taskId?: string;
                 /** @description Quando `true`, devolve apenas execuções que o usuário autenticado pode avaliar (fila de conferência). */
                 pendingReviewForMe?: boolean;
                 page?: components["parameters"]["Page"];

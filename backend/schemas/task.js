@@ -36,6 +36,14 @@ const points = z
   .min(0, { message: 'Os pontos nao podem ser negativos.' })
   .max(100, { message: 'Os pontos devem ser no maximo 100.' });
 
+// Nula e permitida de proposito: e assim que se LIMPA uma estimativa ja salva.
+const estimatedMinutes = z
+  .number()
+  .int({ message: 'A estimativa deve ser um numero inteiro de minutos.' })
+  .min(1, { message: 'A estimativa deve ser de pelo menos 1 minuto.' })
+  .max(1440, { message: 'A estimativa deve ser no maximo 1440 minutos (24 horas).' })
+  .nullable();
+
 const assignedTo = objectId.nullable();
 
 const recurrence = z
@@ -82,6 +90,7 @@ const createTaskSchema = z.strictObject({
   recurrence,
   difficulty,
   points: points.optional(),
+  estimatedMinutes: estimatedMinutes.optional(),
   assignedTo: assignedTo.optional(),
   assignmentStrategy: assignmentStrategy.optional(),
 });
@@ -93,6 +102,7 @@ const updateTaskSchema = z
     recurrence: recurrence.optional(),
     difficulty: difficulty.optional(),
     points: points.optional(),
+    estimatedMinutes: estimatedMinutes.optional(),
     assignedTo: assignedTo.optional(),
     assignmentStrategy: assignmentStrategy.optional(),
     status: status.optional(),

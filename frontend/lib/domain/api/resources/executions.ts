@@ -15,6 +15,8 @@ export interface ListExecutionsQuery {
   to?: string;
   status?: ExecutionStatus;
   executedBy?: string;
+  /** So as execucoes desta tarefa (para comparar estimado com real). */
+  taskId?: string;
   /** Fila de conferencia: o que ainda posso avaliar. */
   pendingReviewForMe?: boolean;
   page?: number;

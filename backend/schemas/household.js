@@ -56,6 +56,34 @@ const joinHouseholdSchema = z.strictObject({
   role: z.enum(['adult', 'child'], { message: 'O papel deve ser adult ou child.' }).optional(),
 });
 
+// Tempo livre da pessoa. Sem valor padrao aqui: quem decide o de-verdade e o
+// documento, e o contrato nao deve passar a exigir o campo.
+const freeTimeMinutes = z
+  .number()
+  .int({ message: 'O tempo livre deve ser um numero inteiro de minutos.' })
+  .min(0, { message: 'O tempo livre nao pode ser negativo.' })
+  .max(1440, { message: 'O tempo livre deve ser no maximo 1440 minutos (24 horas).' });
+
+const freeTime = z
+  .strictObject({
+    mode: z.enum(['fixo', 'por_dia'], {
+      message: 'O modo do tempo livre deve ser fixo ou por_dia.',
+    }),
+    fixedMinutes: freeTimeMinutes.nullable().optional(),
+    byWeekday: z
+      .array(freeTimeMinutes)
+      .length(7, { message: 'O tempo livre por dia precisa de 7 posicoes (domingo a sabado).' })
+      .optional(),
+  })
+  .refine((value) => value.mode !== 'fixo' || value.fixedMinutes != null, {
+    message: 'No modo fixo, informe fixedMinutes.',
+    path: ['fixedMinutes'],
+  })
+  .refine((value) => value.mode !== 'por_dia' || value.byWeekday !== undefined, {
+    message: 'No modo por dia, informe os 7 dias.',
+    path: ['byWeekday'],
+  });
+
 const updateMemberSchema = z
   .strictObject({
     role: z.enum(['owner', 'adult', 'child'], {
@@ -69,10 +97,14 @@ const updateMemberSchema = z
         canManageMembers: z.boolean().optional(),
       })
       .optional(),
+    // null LIMPA: volta a "nunca configurado", que e diferente de zero.
+    freeTime: freeTime.nullable().optional(),
   })
-  .refine((value) => value.role !== undefined || value.capabilities !== undefined, {
-    message: 'Informe papel ou capacidades.',
-  });
+  .refine(
+    (value) =>
+      value.role !== undefined || value.capabilities !== undefined || value.freeTime !== undefined,
+    { message: 'Informe papel, capacidades ou tempo livre.' }
+  );
 
 // Cadastro de uma pessoa nova feito pelo dono da casa: cria o usuario E a membership
 // numa chamada so. Nao cria casa nenhuma (diferente de POST /auth/register).

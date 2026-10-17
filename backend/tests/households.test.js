@@ -289,6 +289,127 @@ describe('membros', () => {
     });
   });
 
+  it('sem tempo livre configurado, o campo vem null (e nao zero)', async () => {
+    const owner = await createOwner();
+    const child = await addMember(owner.token, owner.household.id, 'child');
+
+    // null = nunca configurado. Zero seria "configurado sem tempo", que gera aviso.
+    expect(child.membership.freeTime).toBeNull();
+  });
+
+  it('tempo livre fixo vale para todos os dias', async () => {
+    const owner = await createOwner();
+    const child = await addMember(owner.token, owner.household.id, 'child');
+
+    const response = await request(app)
+      .patch('/api/v1/households/' + owner.household.id + '/members/' + child.membership.user.id)
+      .set(bearer(owner.token))
+      .send({ freeTime: { mode: 'fixo', fixedMinutes: 120 } });
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.freeTime.mode).toBe('fixo');
+    expect(response.body.data.freeTime.fixedMinutes).toBe(120);
+  });
+
+  it('tempo livre por dia guarda os sete dias, domingo primeiro', async () => {
+    const owner = await createOwner();
+    const child = await addMember(owner.token, owner.household.id, 'child');
+
+    // Seg a sex 1h, sabado 4h, domingo nada -- o exemplo do pedido.
+    const semana = [0, 60, 60, 60, 60, 60, 240];
+
+    const response = await request(app)
+      .patch('/api/v1/households/' + owner.household.id + '/members/' + child.membership.user.id)
+      .set(bearer(owner.token))
+      .send({ freeTime: { mode: 'por_dia', byWeekday: semana } });
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.freeTime.mode).toBe('por_dia');
+    expect(response.body.data.freeTime.byWeekday).toEqual(semana);
+  });
+
+  it('dia nao marcado no modo por dia vira zero', async () => {
+    const owner = await createOwner();
+    const child = await addMember(owner.token, owner.household.id, 'child');
+
+    const response = await request(app)
+      .patch('/api/v1/households/' + owner.household.id + '/members/' + child.membership.user.id)
+      .set(bearer(owner.token))
+      .send({ freeTime: { mode: 'por_dia', byWeekday: [0, 60, 60, 60, 60, 60, 240] } });
+
+    // Domingo foi marcado como zero explicitamente e continua zero.
+    expect(response.body.data.freeTime.byWeekday[0]).toBe(0);
+  });
+
+  it('null limpa o tempo livre e volta ao estado nao configurado', async () => {
+    const owner = await createOwner();
+    const child = await addMember(owner.token, owner.household.id, 'child');
+    const url = '/api/v1/households/' + owner.household.id + '/members/' + child.membership.user.id;
+
+    await request(app)
+      .patch(url)
+      .set(bearer(owner.token))
+      .send({ freeTime: { mode: 'fixo', fixedMinutes: 120 } });
+
+    const limpo = await request(app).patch(url).set(bearer(owner.token)).send({ freeTime: null });
+
+    // Limpar tem que ser diferente de zerar: zerar geraria aviso de carga.
+    expect(limpo.status).toBe(200);
+    expect(limpo.body.data.freeTime).toBeNull();
+  });
+
+  it('tempo livre nao mexe no papel nem nas capacidades', async () => {
+    const owner = await createOwner();
+    const child = await addMember(owner.token, owner.household.id, 'child');
+
+    const response = await request(app)
+      .patch('/api/v1/households/' + owner.household.id + '/members/' + child.membership.user.id)
+      .set(bearer(owner.token))
+      .send({ freeTime: { mode: 'fixo', fixedMinutes: 90 } });
+
+    expect(response.body.data.role).toBe('child');
+    expect(response.body.data.capabilities.canManageTasks).toBe(false);
+  });
+
+  it('modo por dia exige os sete dias -> 400', async () => {
+    const owner = await createOwner();
+    const child = await addMember(owner.token, owner.household.id, 'child');
+
+    const response = await request(app)
+      .patch('/api/v1/households/' + owner.household.id + '/members/' + child.membership.user.id)
+      .set(bearer(owner.token))
+      .send({ freeTime: { mode: 'por_dia', byWeekday: [60, 60] } });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error.code).toBe('VALIDATION_ERROR');
+  });
+
+  it('rejeita tempo livre negativo -> 400', async () => {
+    const owner = await createOwner();
+    const child = await addMember(owner.token, owner.household.id, 'child');
+
+    const response = await request(app)
+      .patch('/api/v1/households/' + owner.household.id + '/members/' + child.membership.user.id)
+      .set(bearer(owner.token))
+      .send({ freeTime: { mode: 'fixo', fixedMinutes: -30 } });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error.code).toBe('VALIDATION_ERROR');
+  });
+
+  it('child nao altera o tempo livre de ninguem', async () => {
+    const owner = await createOwner();
+    const child = await addMember(owner.token, owner.household.id, 'child');
+
+    const response = await request(app)
+      .patch('/api/v1/households/' + owner.household.id + '/members/' + child.membership.user.id)
+      .set(bearer(child.token))
+      .send({ freeTime: { mode: 'fixo', fixedMinutes: 999 } });
+
+    expect(response.status).toBe(403);
+    expect(response.body.error.code).toBe('INSUFFICIENT_ROLE');
+  });
+
   it('nao deixa a casa sem owner ao rebaixar o ultimo', async () => {
     const owner = await createOwner();
 

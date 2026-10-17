@@ -111,6 +111,28 @@ const TaskExecutionSchema = new mongoose.Schema(
       default: 0,
       min: 0,
     },
+
+    // Retrato do tempo no momento da conclusao, pela mesma razao dos pontos: mudar a
+    // estimativa da tarefa depois nao reescreve o que ja aconteceu.
+    estimatedMinutes: {
+      type: Number,
+      default: null,
+      min: 0,
+      max: [1440, 'A estimativa nao pode passar de 1440 minutos (24 horas).'],
+    },
+
+    // Quanto levou DE VERDADE, e so quando quem concluiu informou.
+    //
+    // null significa "nao informado" -- nao zero. Quem consome usa
+    // `actualMinutes ?? estimatedMinutes` para obter o tempo considerado. Gravar aqui o
+    // valor presumido apagaria a diferenca entre medido e chutado, que e o unico motivo
+    // de este campo existir.
+    actualMinutes: {
+      type: Number,
+      default: null,
+      min: 0,
+      max: [1440, 'O tempo real nao pode passar de 1440 minutos (24 horas).'],
+    },
   },
   {
     timestamps: true,

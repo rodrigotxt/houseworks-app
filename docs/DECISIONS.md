@@ -51,6 +51,68 @@ caminho, onde a existência dela já é conhecida.
 
 **Consequência.** Um cliente não consegue enumerar ids de outras casas.
 
+### D33 — Estimativa de tempo é dado de conveniência, e `null` limpa
+
+**Contexto.** A tarefa sabia quanto *vale* (pontos) mas não quanto *demora*. Sem isso não dá
+para olhar a agenda de sábado e saber se cabe — que é a pergunta que a casa realmente faz.
+
+**Decisão.** `estimatedMinutes`: inteiro de 1 a 1440, **nulável**. Fora de `required` no
+contrato, como `assignedTo`. Um `null` explícito **limpa** a estimativa; omitir a chave não a
+toca.
+
+**Descartado.**
+
+- **Derivar da dificuldade**, como os pontos fazem. Não funciona: dificuldade não prediz
+  duração. Limpar o banheiro é `dificil` e rápido; passar o aspirador é `medio` e demorado. Os
+  pontos medem o *peso* da tarefa, não o *tempo* dela — são eixos diferentes.
+- **Obrigatório.** Boa parte das tarefas não tem duração previsível, e exigir um número
+  inventado só para preencher o campo produziria dado ruim.
+- **Texto livre** ("meia hora", "a manhã toda"). Não dá para somar depois, e a soma é
+  justamente para o que o campo existe.
+
+**Consequência.** É o primeiro campo do domínio que existe para ser **exibido**, não para
+decidir: nenhuma regra de negócio o consulta, e nulo nunca impede nada. O teto de 1440 (24h) é
+barreira contra erro de digitação, não uma regra de negócio.
+
+O ajuste que isso exigiu no cliente também vale como aviso: a Server Action de atualização
+desestrutura os campos um a um, então um campo novo esquecido nessa lista **some sem erro
+nenhum** — o formulário parece não salvar. Criar passava (o corpo vai inteiro), editar não.
+
+### D34 — Tempo livre é configuração semanal, e `null` não é zero
+
+**Contexto.** A casa não tinha como responder "cabe tudo no sábado?". O membro sabia o que
+**pode** fazer (capacidades), não quanto tempo **tem** para fazer.
+
+**Decisão.** `Membership.freeTime`, com dois modos: `fixo` (um valor para todos os dias) e
+`por_dia` (sete valores, domingo primeiro). Editável na modal *Papel e permissões*, por quem já
+administra a casa — a rota é a mesma que muda papel e capacidades.
+
+**A decisão que mais importa: `null` ≠ `0`.**
+
+- `null` = a pessoa **nunca configurou**. Fica fora do aviso de carga.
+- `0` = configurado, **sem tempo** naquele dia. Gera aviso legítimo.
+
+Sem essa distinção, todo membro nasceria com zero e a casa inteira apareceria "estourando" o
+tempo livre no primeiro dia — um aviso que ninguém pediu, sobre um dado que ninguém informou.
+Seria a maneira mais rápida de ensinar todo mundo a ignorar o aviso.
+
+**Descartado.**
+
+- **Guardar só os sete valores**, deixando o modo como detalhe de tela. Reabrir a modal
+  mostraria "por dia" com os sete iguais, perdendo a intenção de quem escolheu "o mesmo todos
+  os dias".
+- **Bloquear** a atribuição que passa do tempo livre. Numa casa as pessoas fazem o que dá;
+  transformar isso em `403` criaria uma briga com o sistema no meio de uma tarefa.
+- **Dia em branco herdando o valor dos outros**. Seria adivinhação: quem não marcou domingo
+  pode ter querido dizer que domingo não tem folga. Branco é zero, e a tela diz isso.
+
+**Consequência.** A regra vive em dois lugares, igual nos dois: `backend/utils/freeTime.js` e
+`lib/domain/freeTime.ts` — este último para a agenda comparar sem uma ida à API por dia. O
+aviso aparece na agenda, por dia, só para quem passa do próprio tempo.
+
+O aviso conta apenas tarefas **com estimativa** (D33) e diz na tela quantas ficaram de fora.
+Um aviso que somasse zero para tarefa sem estimativa mentiria para menos, em silêncio.
+
 ---
 
 ## B. Tempo e recorrência
@@ -398,3 +460,74 @@ o `toJSON` do pai.
 
 **Decisão.** Todo modelo configura os dois com `createJsonOptions()`
 (`config/serialization.js`), que expõe `id` e remove `_id`/`__v`.
+
+---
+
+### D35 — Backup se prova restaurando, não conferindo o arquivo
+
+**Contexto.** O banco — pontos, execuções, avaliações, histórico — vivia num único volume
+Docker, numa única VPS, **sem nenhuma cópia**. O custo disso é assimétrico: o código se
+reescreve, o histórico da casa não.
+
+**Decisão.** Um script de dump e um **ensaio de restauração** que restaura a cópia num container
+descartável e confere o conteúdo. Os dois versionados em `scripts/`, instalados por
+`scripts/install-backup.sh` e agendados por cron.
+
+**Quatro decisões dentro dessa:**
+
+- **O nome final só aparece depois de o arquivo passar no teste.** O dump vai para
+  `.archive.gz.parcial` e só é renomeado após `gzip -t` e a checagem de tamanho. Um dump
+  interrompido no meio, escrito direto no nome final, produz um arquivo plausível e inútil.
+- **`rclone copy`, nunca `sync`.** `sync` espelha inclusive as remoções: uma cópia local apagada
+  se propagaria para o destino. Em backup, remover no destino é a última coisa que se quer.
+- **O ensaio sobe um MongoDB novo**, com volume próprio, em vez de usar um banco auxiliar da
+  mesma instância. Custa segundos e garante que a produção não é tocada nem para leitura — e que
+  a cópia se basta sozinha, sem nada do servidor de origem.
+- **Os scripts são copiados para `/opt/houseworks-backup`**, não apontados do clone do Komodo.
+  Aquele caminho pertence ao Komodo e acompanha a branch configurada; um cron apontando para lá
+  quebraria em silêncio no dia em que o caminho mudasse.
+
+**Descartado.**
+
+- **Só conferir o arquivo** (tamanho, gzip íntegro). É o que quase todo mundo faz, e não pega o
+  caso mais provável: o dump íntegro como arquivo e incompleto como dado.
+- **Verificar só no dia do incidente.** É o pior momento possível para descobrir que a cópia não
+  presta. Por isso o ensaio também roda no cron, semanalmente.
+
+**Consequência.** Passam a existir duas coisas verificáveis: há uma cópia diária, e ela foi
+provada restaurável. O `--drop` no procedimento real está documentado em
+[OPERATIONS.md](./OPERATIONS.md) §12 — sem ele o restore **soma** ao banco existente e duplica
+tudo.
+
+---
+
+### D36 — Tempo real é medido ou presumido, e o registro diz qual
+
+**Contexto.** Com a estimativa (D33) e o tempo livre (D34), faltava o outro lado: quanto a
+tarefa levou **de verdade**. Sem isso a estimativa nunca se calibra — continua sendo um chute
+que ninguém confere.
+
+**Decisão.** Ao concluir, a pessoa pode informar quantos minutos levou. É **opcional**: em
+branco, vale a estimativa da tarefa, como pedido. A execução guarda **dois** campos:
+`estimatedMinutes` (cópia da estimativa vigente, como `points`) e `actualMinutes` (só o que foi
+informado, `null` quando ninguém mediu).
+
+**A decisão que importa:** o valor presumido **não** é gravado em `actualMinutes`. Quem lê
+aplica a regra `actualMinutes ?? estimatedMinutes`. Gravar a estimativa no lugar do tempo real
+cumpriria a regra do produto e destruiria a informação que dá valor ao campo: depois disso não
+haveria como distinguir tempo medido de tempo chutado, e toda média pareceria um dado quando
+pode ser só a estimativa devolvida.
+
+Por isso o agregado devolve três números e não um: a média, quantas foram **medidas** e quantas
+foram **presumidas**. A ficha da tarefa mostra a média e, quando houver presunções, avisa quantas.
+
+**Descartado.**
+
+- **Obrigar o tempo no formulário.** Transformaria o gesto mais repetido do app (marcar que fez)
+  numa sessão de cronometragem. Quem quer só marcar, marca.
+- **Deduzir o tempo do intervalo entre abrir e concluir.** A pessoa abre a agenda de manhã e
+  marca à noite; o número não mediria a tarefa, mediria a distância até o celular.
+
+**Consequência.** A comparação fica disponível na ficha da tarefa (estimativa, média real e
+quantas sem medição) e a listagem de execuções ganhou filtro `taskId`, que é o que permite
+buscar o histórico de uma tarefa sem baixar o da casa inteira.
