@@ -145,6 +145,8 @@ da mesma tarefa no mesmo dia — é isso que permite rodar o gerador quantas vez
 | `note` | comentário de quem **executou** |
 | `rating` (1–5), `ratedBy`, `ratedAt`, `ratingNote` | nota e comentário de quem **avaliou** |
 | `points` | cópia dos pontos da ocorrência na conclusão |
+| `estimatedMinutes` | cópia da estimativa da tarefa na conclusão; `null` = não tinha |
+| `actualMinutes` | tempo medido, **só** quando informado; `null` = não informado (D36) |
 
 **Invariantes:**
 - Só existe execução ligada a uma ocorrência.

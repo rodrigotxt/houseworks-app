@@ -60,6 +60,77 @@ describe('concluir ocorrencia', () => {
     expect(naAgenda.body.data.completedBy.id).toBe(child.membership.user.id);
   });
 
+  it('grava o tempo real informado e a estimativa vigente', async () => {
+    const { child, occurrenceId } = await cenario({ task: { estimatedMinutes: 45 } });
+
+    const response = await completar(child.token, occurrenceId, { actualMinutes: 52 });
+
+    expect(response.status).toBe(201);
+    expect(response.body.data.execution.actualMinutes).toBe(52);
+    expect(response.body.data.execution.estimatedMinutes).toBe(45);
+  });
+
+  it('sem tempo informado, actualMinutes fica null (e nao a estimativa)', async () => {
+    const { child, occurrenceId } = await cenario({ task: { estimatedMinutes: 45 } });
+
+    const response = await completar(child.token, occurrenceId, {});
+
+    // null significa "nao informado". Quem le aplica actual ?? estimated. Gravar a
+    // estimativa aqui apagaria a diferenca entre tempo medido e tempo presumido, que e
+    // o unico motivo de o campo existir.
+    expect(response.body.data.execution.actualMinutes).toBeNull();
+    expect(response.body.data.execution.estimatedMinutes).toBe(45);
+  });
+
+  it('tarefa sem estimativa e sem tempo informado: os dois ficam null', async () => {
+    const { child, occurrenceId } = await cenario();
+
+    const response = await completar(child.token, occurrenceId, {});
+
+    expect(response.body.data.execution.actualMinutes).toBeNull();
+    expect(response.body.data.execution.estimatedMinutes).toBeNull();
+  });
+
+  it('mudar a estimativa da tarefa depois nao reescreve a execucao', async () => {
+    const { owner, child, taskId, occurrenceId } = await cenario({
+      task: { estimatedMinutes: 30 },
+    });
+
+    const concluida = await completar(child.token, occurrenceId, { actualMinutes: 40 });
+    const executionId = concluida.body.data.execution.id;
+
+    await request(app)
+      .patch('/api/v1/tasks/' + taskId)
+      .set(bearer(owner.token))
+      .send({ estimatedMinutes: 90 });
+
+    const depois = await request(app)
+      .get('/api/v1/executions/' + executionId)
+      .set(bearer(owner.token));
+
+    // O retrato do momento da conclusao nao muda: e o que permite comparar depois.
+    expect(depois.body.data.estimatedMinutes).toBe(30);
+    expect(depois.body.data.actualMinutes).toBe(40);
+  });
+
+  it('rejeita tempo real negativo -> 400', async () => {
+    const { child, occurrenceId } = await cenario();
+
+    const response = await completar(child.token, occurrenceId, { actualMinutes: -5 });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error.code).toBe('VALIDATION_ERROR');
+  });
+
+  it('rejeita tempo real fracionado -> 400', async () => {
+    const { child, occurrenceId } = await cenario();
+
+    const response = await completar(child.token, occurrenceId, { actualMinutes: 12.5 });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error.code).toBe('VALIDATION_ERROR');
+  });
+
   it('concluir de novo -> 409 OCCURRENCE_ALREADY_COMPLETED', async () => {
     const { owner, occurrenceId } = await cenario();
 

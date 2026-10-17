@@ -290,6 +290,7 @@ export default async function SchedulePage({
                             canComplete={canComplete(ocorrencia, membership, session.user.id)}
                             canSkip={canSkip(ocorrencia, membership)}
                             canUndo={canUndoOccurrence(ocorrencia, membership)}
+                            estimatedMinutes={ocorrencia.task?.estimatedMinutes ?? null}
                           />
                         </Box>
                       </CardContent>

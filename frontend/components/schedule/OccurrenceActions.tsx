@@ -38,6 +38,8 @@ interface OccurrenceActionsProps {
   canComplete: boolean;
   canSkip: boolean;
   canUndo: boolean;
+  /** Estimativa da tarefa, em minutos. Serve para pré-preencher o tempo real. */
+  estimatedMinutes?: number | null;
   /** Na TV não existe ponteiro: alvos maiores e nada de hover. */
   large?: boolean;
 }
@@ -50,6 +52,7 @@ export default function OccurrenceActions({
   canComplete,
   canSkip,
   canUndo,
+  estimatedMinutes,
   large,
 }: OccurrenceActionsProps) {
   const [dialogo, setDialogo] = useState<Dialogo>(null);
@@ -143,6 +146,24 @@ export default function OccurrenceActions({
               minRows={2}
               fullWidth
               autoFocus
+            />
+
+            {/* Opcional de proposito: quem so quer marcar que fez nao deve ser obrigado a
+                cronometrar. Em branco, vale a estimativa da tarefa -- e a execucao fica
+                registrada como presumida, para a media nao mentir. */}
+            <TextField
+              name="actualMinutes"
+              label="Quanto tempo levou (min)"
+              type="number"
+              inputProps={{ min: 0, max: 1440 }}
+              defaultValue={estimatedMinutes ?? ''}
+              helperText={
+                estimatedMinutes
+                  ? 'Em branco = ' + estimatedMinutes + ' min, a estimativa da tarefa'
+                  : 'Opcional'
+              }
+              fullWidth
+              sx={{ mt: 2 }}
             />
           </DialogContent>
           <DialogActions>

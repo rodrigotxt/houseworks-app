@@ -498,3 +498,36 @@ descartável e confere o conteúdo. Os dois versionados em `scripts/`, instalado
 provada restaurável. O `--drop` no procedimento real está documentado em
 [OPERATIONS.md](./OPERATIONS.md) §12 — sem ele o restore **soma** ao banco existente e duplica
 tudo.
+
+---
+
+### D36 — Tempo real é medido ou presumido, e o registro diz qual
+
+**Contexto.** Com a estimativa (D33) e o tempo livre (D34), faltava o outro lado: quanto a
+tarefa levou **de verdade**. Sem isso a estimativa nunca se calibra — continua sendo um chute
+que ninguém confere.
+
+**Decisão.** Ao concluir, a pessoa pode informar quantos minutos levou. É **opcional**: em
+branco, vale a estimativa da tarefa, como pedido. A execução guarda **dois** campos:
+`estimatedMinutes` (cópia da estimativa vigente, como `points`) e `actualMinutes` (só o que foi
+informado, `null` quando ninguém mediu).
+
+**A decisão que importa:** o valor presumido **não** é gravado em `actualMinutes`. Quem lê
+aplica a regra `actualMinutes ?? estimatedMinutes`. Gravar a estimativa no lugar do tempo real
+cumpriria a regra do produto e destruiria a informação que dá valor ao campo: depois disso não
+haveria como distinguir tempo medido de tempo chutado, e toda média pareceria um dado quando
+pode ser só a estimativa devolvida.
+
+Por isso o agregado devolve três números e não um: a média, quantas foram **medidas** e quantas
+foram **presumidas**. A ficha da tarefa mostra a média e, quando houver presunções, avisa quantas.
+
+**Descartado.**
+
+- **Obrigar o tempo no formulário.** Transformaria o gesto mais repetido do app (marcar que fez)
+  numa sessão de cronometragem. Quem quer só marcar, marca.
+- **Deduzir o tempo do intervalo entre abrir e concluir.** A pessoa abre a agenda de manhã e
+  marca à noite; o número não mediria a tarefa, mediria a distância até o celular.
+
+**Consequência.** A comparação fica disponível na ficha da tarefa (estimativa, média real e
+quantas sem medição) e a listagem de execuções ganhou filtro `taskId`, que é o que permite
+buscar o histórico de uma tarefa sem baixar o da casa inteira.

@@ -856,6 +856,13 @@ paths:
           in: query
           schema:
             type: string
+        - name: taskId
+          in: query
+          description: |
+            Só as execuções desta tarefa. É o que permite comparar o tempo estimado com o real de
+            uma tarefa específica sem baixar o histórico inteiro da casa.
+          schema:
+            type: string
         - name: pendingReviewForMe
           in: query
           description: Quando `true`, devolve apenas execuções que o usuário autenticado pode avaliar (fila de conferência).
@@ -2229,6 +2236,30 @@ components:
               maxLength: 500
             - type: 'null'
           example: Banheiro limpo e brilhando!
+        estimatedMinutes:
+          description: |
+            Estimativa que a tarefa tinha **no momento da conclusão**. É cópia, como `points`:
+            mudar a tarefa depois não reescreve o que já aconteceu. `null` = a tarefa não tinha
+            estimativa.
+          oneOf:
+            - type: integer
+              minimum: 1
+              maximum: 1440
+            - type: 'null'
+          example: 45
+        actualMinutes:
+          description: |
+            Quanto levou de verdade, em minutos — **só quando quem concluiu informou**.
+
+            `null` significa "não informado", e quem consome deve tratar `actualMinutes ??
+            estimatedMinutes` como o tempo considerado. Guardar o valor presumido aqui apagaria a
+            diferença entre medido e chutado, que é justamente o que dá valor ao campo.
+          oneOf:
+            - type: integer
+              minimum: 0
+              maximum: 1440
+            - type: 'null'
+          example: 52
         status:
           type: string
           enum: [pending_review, approved, auto_approved]
@@ -2753,6 +2784,15 @@ components:
             Momento da execução. Default é o instante do servidor. Só é aceito dentro de uma janela
             curta no passado (registro retroativo de quem esqueceu de marcar).
           example: '2025-07-05T18:30:00Z'
+        actualMinutes:
+          description: |
+            Quanto tempo a tarefa levou, em minutos. **Opcional**: em branco, vale a estimativa
+            que a tarefa tem. Fica gravado como `null` quando não foi informado, para não
+            confundir tempo medido com tempo presumido.
+          type: integer
+          minimum: 0
+          maximum: 1440
+          example: 52
 
     SkipOccurrenceRequest:
       type: object

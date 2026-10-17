@@ -57,6 +57,44 @@ export function formatDuration(minutes: number | null | undefined): string {
   return resto === 0 ? horas + 'h' : horas + 'h' + String(resto).padStart(2, '0');
 }
 
+export interface TempoComparado {
+  /** O tempo real medio, em minutos. `null` quando ninguem mediu. */
+  real: number | null;
+  /** Quantas execucoes tiveram tempo medido. */
+  medidas: number;
+  /** Quantas usaram a estimativa por falta de informacao. */
+  presumidas: number;
+}
+
+/**
+ * Tempo real medio de uma lista de execucoes.
+ *
+ * A regra do produto: quando ninguem informou quanto levou, vale a estimativa que a
+ * execucao guardou. Mas a media devolve TAMBEM quantas foram medidas e quantas foram
+ * presumidas — uma media feita so de presuncoes e igual a estimativa por construcao,
+ * e apresenta-la como "tempo real" seria mentira.
+ */
+export function tempoRealMedio(
+  execucoes: { actualMinutes?: number | null; estimatedMinutes?: number | null }[]
+): TempoComparado {
+  let soma = 0;
+  let medidas = 0;
+  let presumidas = 0;
+
+  for (const execucao of execucoes) {
+    const considerados = execucao.actualMinutes ?? execucao.estimatedMinutes ?? null;
+    if (considerados === null) continue;
+
+    soma += considerados;
+    if (execucao.actualMinutes == null) presumidas += 1;
+    else medidas += 1;
+  }
+
+  const total = medidas + presumidas;
+
+  return { real: total === 0 ? null : Math.round(soma / total), medidas, presumidas };
+}
+
 /** Concorda o verbo com a quantidade: '1 tarefa' / '3 tarefas'. */
 export function plural(quantidade: number, singular: string, plural: string): string {
   return quantidade + ' ' + (quantidade === 1 ? singular : plural);

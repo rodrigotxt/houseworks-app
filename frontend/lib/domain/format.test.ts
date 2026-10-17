@@ -11,7 +11,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { formatDuration } from './format.ts';
+import { formatDuration, tempoRealMedio } from './format.ts';
 
 test('abaixo de uma hora, escreve em minutos', () => {
   assert.equal(formatDuration(1), '1 min');
@@ -37,4 +37,57 @@ test('hora quebrada sai com dois digitos nos minutos', () => {
 test('sem estimativa, escreve o travessao', () => {
   assert.equal(formatDuration(null), '—');
   assert.equal(formatDuration(undefined), '—');
+});
+
+// --- tempo real x estimado ---
+
+test('a media usa o tempo informado', () => {
+  const tempo = tempoRealMedio([
+    { actualMinutes: 40, estimatedMinutes: 30 },
+    { actualMinutes: 50, estimatedMinutes: 30 },
+  ]);
+
+  assert.equal(tempo.real, 45);
+  assert.equal(tempo.medidas, 2);
+  assert.equal(tempo.presumidas, 0);
+});
+
+test('sem tempo informado, vale a estimativa da execucao', () => {
+  const tempo = tempoRealMedio([
+    { actualMinutes: null, estimatedMinutes: 30 },
+    { actualMinutes: 50, estimatedMinutes: 30 },
+  ]);
+
+  // (30 + 50) / 2 = 40. E conta 1 presumida, para a tela poder ser honesta.
+  assert.equal(tempo.real, 40);
+  assert.equal(tempo.medidas, 1);
+  assert.equal(tempo.presumidas, 1);
+});
+
+test('sem tempo e sem estimativa, a execucao nao entra na conta', () => {
+  const tempo = tempoRealMedio([
+    { actualMinutes: null, estimatedMinutes: null },
+    { actualMinutes: 20, estimatedMinutes: null },
+  ]);
+
+  assert.equal(tempo.real, 20);
+  assert.equal(tempo.medidas, 1);
+});
+
+test('lista vazia ou sem dados devolve real null, nao zero', () => {
+  assert.equal(tempoRealMedio([]).real, null);
+  assert.equal(tempoRealMedio([{ actualMinutes: null, estimatedMinutes: null }]).real, null);
+});
+
+test('media feita so de presuncoes e igual a estimativa', () => {
+  // E por isso que presumidas existe: sem esse numero, isto se apresentaria como
+  // "tempo real" sendo apenas a estimativa de volta.
+  const tempo = tempoRealMedio([
+    { actualMinutes: null, estimatedMinutes: 30 },
+    { actualMinutes: null, estimatedMinutes: 30 },
+  ]);
+
+  assert.equal(tempo.real, 30);
+  assert.equal(tempo.medidas, 0);
+  assert.equal(tempo.presumidas, 2);
 });

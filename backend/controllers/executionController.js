@@ -40,6 +40,10 @@ exports.listByHousehold = async (req, res) => {
     filter.status = query.status;
   }
 
+  if (query.taskId) {
+    filter.task = query.taskId;
+  }
+
   if (query.pendingReviewForMe) {
     // Fila de conferencia: o que sobrou para EU avaliar. Quem nao avalia ve fila vazia.
     const capabilities = resolveCapabilities(req.membership.role, req.membership.overrides);

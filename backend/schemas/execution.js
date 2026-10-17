@@ -39,6 +39,7 @@ const listExecutionsQuerySchema = z
       })
       .optional(),
     executedBy: objectId.optional(),
+    taskId: objectId.optional(),
     // Fila de conferencia: o que o usuario autenticado ainda pode avaliar.
     pendingReviewForMe: booleanQuery.optional(),
     page: z.coerce.number().int().min(1).default(1),

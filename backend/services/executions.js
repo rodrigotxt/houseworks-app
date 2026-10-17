@@ -88,6 +88,12 @@ async function completeOccurrence(occurrence, membership, input, options) {
   const completionDate = payload.completionDate || now;
   assertCompletionDateInRange(completionDate, now);
 
+  // Retrato do tempo: a estimativa VIGENTE agora. Se a tarefa nao tiver estimativa,
+  // fica null e nao ha o que comparar depois.
+  const taskRef = occurrence.task && occurrence.task._id ? occurrence.task._id : occurrence.task;
+  const tarefa = await Task.findById(taskRef).select('estimatedMinutes');
+  const estimatedMinutes = tarefa && tarefa.estimatedMinutes != null ? tarefa.estimatedMinutes : null;
+
   const execution = await new TaskExecution({
     household: occurrence.household,
     occurrence: occurrence._id,
@@ -100,6 +106,11 @@ async function completeOccurrence(occurrence, membership, input, options) {
     status: 'pending_review',
     // Copia dos pontos: mudar a tarefa depois nao reescreve o que ja valeu.
     points: occurrence.points || 0,
+    estimatedMinutes,
+    // So grava o que a pessoa informou. O "vale a estimativa" e aplicado por quem le
+    // (actualMinutes ?? estimatedMinutes), nao aqui: gravar o presumido apagaria a
+    // diferenca entre tempo medido e tempo chutado.
+    actualMinutes: payload.actualMinutes ?? null,
   }).save();
 
   occurrence.status = 'done';

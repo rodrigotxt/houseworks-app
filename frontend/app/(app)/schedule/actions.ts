@@ -41,8 +41,16 @@ export async function completeOccurrence(
   const nota = formData.get('note');
   const note = typeof nota === 'string' && nota.trim() !== '' ? nota.trim() : undefined;
 
+  // Em branco NAO vira zero: some da requisicao, e a API entende que o tempo nao foi
+  // informado (o valor considerado passa a ser a estimativa da tarefa).
+  const minutos = formData.get('actualMinutes');
+  const texto = typeof minutos === 'string' ? minutos.trim() : '';
+  const convertido = Number(texto);
+  const actualMinutes =
+    texto !== '' && Number.isFinite(convertido) && convertido >= 0 ? convertido : undefined;
+
   try {
-    await (await serverApi()).occurrences.complete(occurrenceId, { note });
+    await (await serverApi()).occurrences.complete(occurrenceId, { note, actualMinutes });
   } catch (causa) {
     // 409 aqui é comum e não é defeito: alguém da casa marcou antes. Não redirecionamos
     // nem recarregamos — a mensagem explica, e a próxima navegação traz o estado novo.

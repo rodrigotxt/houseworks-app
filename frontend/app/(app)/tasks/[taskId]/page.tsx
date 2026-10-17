@@ -19,7 +19,7 @@ import TaskActions from '@/components/tasks/TaskActions';
 import { isApiError } from '@/lib/domain/api';
 import { DIFFICULTY_LABELS, describeRecurrence } from '@/lib/domain/labels';
 import { formatFullDate } from '@/lib/domain/dates';
-import { formatDuration } from '@/lib/domain/format';
+import { formatDuration, tempoRealMedio } from '@/lib/domain/format';
 import { canDeleteTaskForever, canEditTask } from '@/lib/domain/rules';
 import { requireContext, serverApi } from '@/lib/session/server';
 
@@ -42,12 +42,18 @@ export default async function TaskDetailPage({
   params: Promise<{ taskId: string }>;
 }) {
   const { taskId } = await params;
-  const { membership } = await requireContext();
+  const { membership, householdId } = await requireContext();
   const api = await serverApi();
 
   try {
     const tarefa = await api.tasks.get(taskId);
     const podeEditar = canEditTask(membership);
+
+    // Complementar, nao essencial: se esta chamada falhar, a ficha ainda abre.
+    const execucoes = await api.executions
+      .list(householdId, { taskId, pageSize: 100 })
+      .catch(() => null);
+    const tempo = tempoRealMedio(execucoes?.items ?? []);
 
     return (
       <Container maxWidth="md" sx={{ py: 4 }}>
@@ -98,10 +104,24 @@ export default async function TaskDetailPage({
                 <Chip size="small" color="primary" label={tarefa.points + ' pontos'} />
               </Linha>
 
-              {/* Só aparece quando alguém estimou: linha vazia com '—' poluiria a ficha. */}
-              {tarefa.estimatedMinutes != null && (
+              {/* Só aparece quando há o que dizer: estimativa, tempo medido, ou os dois. */}
+              {(tarefa.estimatedMinutes != null || tempo.real !== null) && (
                 <Linha rotulo="Leva">
-                  <Typography variant="body1">{formatDuration(tarefa.estimatedMinutes)}</Typography>
+                  <Typography variant="body1">
+                    {tarefa.estimatedMinutes != null
+                      ? formatDuration(tarefa.estimatedMinutes) + ' estimados'
+                      : ''}
+                    {tarefa.estimatedMinutes != null && tempo.real !== null ? ' · ' : ''}
+                    {tempo.real !== null ? formatDuration(tempo.real) + ' de média real' : ''}
+                  </Typography>
+
+                  {/* Honestidade: média feita só de presunções é a estimativa de novo. */}
+                  {tempo.presumidas > 0 && (
+                    <Typography variant="caption" color="text.secondary" component="p">
+                      {tempo.presumidas} de {tempo.medidas + tempo.presumidas} execuções sem tempo
+                      medido — contam com a estimativa
+                    </Typography>
+                  )}
                 </Linha>
               )}
 

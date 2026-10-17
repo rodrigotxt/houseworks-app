@@ -58,6 +58,14 @@ const completeOccurrenceSchema = z
       .optional(),
     // Registro retroativo de quem esqueceu de marcar (limite em services/executions.js).
     completionDate: z.coerce.date({ message: 'Data de conclusao invalida.' }).optional(),
+    // Opcional: em branco, vale a estimativa da tarefa. Zero e um valor legitimo
+    // (tarefa que levou menos de um minuto), por isso min(0) e nao min(1).
+    actualMinutes: z
+      .number()
+      .int({ message: 'O tempo real deve ser um numero inteiro de minutos.' })
+      .min(0, { message: 'O tempo real nao pode ser negativo.' })
+      .max(1440, { message: 'O tempo real deve ser no maximo 1440 minutos (24 horas).' })
+      .optional(),
   })
   .default({});
 

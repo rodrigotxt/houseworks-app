@@ -1080,6 +1080,22 @@ export interface components {
              */
             note?: string | null;
             /**
+             * @description Estimativa que a tarefa tinha **no momento da conclusão**. É cópia, como `points`:
+             *     mudar a tarefa depois não reescreve o que já aconteceu. `null` = a tarefa não tinha
+             *     estimativa.
+             * @example 45
+             */
+            estimatedMinutes?: number | null;
+            /**
+             * @description Quanto levou de verdade, em minutos — **só quando quem concluiu informou**.
+             *
+             *     `null` significa "não informado", e quem consome deve tratar `actualMinutes ??
+             *     estimatedMinutes` como o tempo considerado. Guardar o valor presumido aqui apagaria a
+             *     diferença entre medido e chutado, que é justamente o que dá valor ao campo.
+             * @example 52
+             */
+            actualMinutes?: number | null;
+            /**
              * @description `pending_review` aguardando avaliação · `approved` avaliada por outro membro ·
              *     `auto_approved` a janela de avaliação expirou sem que ninguém avaliasse.
              * @enum {string}
@@ -1417,6 +1433,13 @@ export interface components {
              * @example 2025-07-05T18:30:00Z
              */
             completionDate?: string;
+            /**
+             * @description Quanto tempo a tarefa levou, em minutos. **Opcional**: em branco, vale a estimativa
+             *     que a tarefa tem. Fica gravado como `null` quando não foi informado, para não
+             *     confundir tempo medido com tempo presumido.
+             * @example 52
+             */
+            actualMinutes?: number;
         };
         SkipOccurrenceRequest: {
             /** @example Viajamos no fim de semana. */
@@ -2272,6 +2295,11 @@ export interface operations {
                 to?: components["parameters"]["ToDate"];
                 status?: "pending_review" | "approved" | "auto_approved";
                 executedBy?: string;
+                /**
+                 * @description Só as execuções desta tarefa. É o que permite comparar o tempo estimado com o real de
+                 *     uma tarefa específica sem baixar o histórico inteiro da casa.
+                 */
+                taskId?: string;
                 /** @description Quando `true`, devolve apenas execuções que o usuário autenticado pode avaliar (fila de conferência). */
                 pendingReviewForMe?: boolean;
                 page?: components["parameters"]["Page"];
