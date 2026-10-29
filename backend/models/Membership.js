@@ -75,6 +75,7 @@ const MembershipSchema = new mongoose.Schema(
       canRate: { type: Boolean },
       canManageTasks: { type: Boolean },
       canManageMembers: { type: Boolean },
+      canManageReminders: { type: Boolean },
     },
 
     freeTime: {

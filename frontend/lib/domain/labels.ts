@@ -79,6 +79,7 @@ export const CAPABILITY_LABELS: Record<Capability, string> = {
   canManageTasks: 'Criar e editar tarefas',
   canAssign: 'Escolher quem faz cada tarefa',
   canRate: 'Avaliar o que os outros fizeram',
+  canManageReminders: 'Criar lembretes para qualquer membro',
   canManageMembers: 'Administrar membros e convites',
 };
 
@@ -154,6 +155,11 @@ export const ERROR_MESSAGES: Partial<Record<ErrorCode, string>> = {
   OCCURRENCE_NOT_COMPLETED: 'Esta ainda não foi concluída.',
   OCCURRENCE_NOT_ASSIGNED_TO_YOU: 'Esta tarefa está designada a outra pessoa.',
   EXECUTION_NOT_FOUND: 'Este registro não existe mais.',
+  REMINDER_NOT_FOUND: 'Este lembrete não existe mais.',
+  DELIVERY_NOT_FOUND: 'Esta notificação não existe mais.',
+  REMINDER_NOT_ASSIGNED_TO_YOU: 'Este lembrete não é destinado a você.',
+  CHANNEL_NOT_AVAILABLE: 'Um dos canais escolhidos não está disponível.',
+  PUSH_NOT_CONFIGURED: 'As notificações push não estão configuradas neste servidor.',
   EXECUTION_ALREADY_RATED: 'Alguém já avaliou esta tarefa.',
   CANNOT_RATE_OWN_EXECUTION: 'Você não pode avaliar o que você mesmo fez.',
   RATING_WINDOW_CLOSED: 'O prazo para avaliar esta tarefa passou.',

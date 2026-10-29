@@ -1,6 +1,6 @@
 # HouseWorks — frontend
 
-A interface do HouseWorks: as tarefas da casa, a agenda e o placar.
+A interface do HouseWorks: as tarefas da casa, a agenda, os lembretes e o placar.
 
 Next.js 15 (App Router) · React 19 · TypeScript · MUI 7 · PWA instalável.
 
@@ -120,6 +120,36 @@ sentido. Três decisões que valem saber antes de mexer:
 
 ---
 
+## Lembretes e push
+
+`/reminders` é a tela dos avisos da casa, em duas leituras:
+
+| Seção | O que é |
+|---|---|
+| **Agora** | notificações que já dispararam e ainda pedem uma ação minha ("Feito", "Adiar") |
+| **Lembretes da casa** | a regra de cada lembrete, com o próximo disparo |
+
+"Feito" resolve a notificação **para mim** e não desliga a recorrência; "Adiar" cria um
+disparo só para quem pediu. A regra de quem cria o quê (adulto para qualquer um, criança só
+para si) vem da API e está espelhada em `lib/domain/rules.ts`.
+
+O canal `in_app` é a caixa de notificações (`GET /me/notifications`). O canal `push` usa
+Web Push:
+
+| Peça | Papel |
+|---|---|
+| `components/reminders/PushToggle.tsx` | liga/desliga o push **neste aparelho** |
+| `lib/device/push.ts` | pede permissão, inscreve no `pushManager` e envia a inscrição para a API |
+| `public/sw.js` | trata `push` e `notificationclick` (abre ou foca `/reminders`) |
+
+O push depende de VAPID no servidor — `GET /me/push/config` diz se existe. Sem as chaves, a
+tela avisa que o push está indisponível e o `in_app` continua. **No iPhone, só funciona com
+o app instalado na Tela de Início** (iOS 16.4+); o toggle explica isso em vez de falhar.
+
+O service worker continua **sem cachear resposta de API** — o push é a única coisa nova nele.
+
+---
+
 ## PWA
 
 Instalável no celular: manifest, ícones (inclusive maskable) e um service worker que
@@ -135,7 +165,7 @@ service worker não atrapalhar o desenvolvimento.
 
 ## O que ainda não existe
 
-- **Concluir e pular pelo painel da TV** — hoje ele é só leitura
+- **Concluir, pular e marcar lembretes pelo painel da TV** — hoje ele é só leitura
 - **Alternar entre casas** — a API suporta várias; a UI assume a primeira
 - **Configurações da casa** — nome, fuso, janela de avaliação e horizonte. O `PATCH /households/{id}`
   já suporta; a tela de Casa cuida hoje só de membros e convite.

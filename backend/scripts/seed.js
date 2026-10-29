@@ -13,8 +13,13 @@ const Membership = require('../models/Membership');
 const Task = require('../models/Task');
 const TaskOccurrence = require('../models/TaskOccurrence');
 const TaskExecution = require('../models/TaskExecution');
+const Reminder = require('../models/Reminder');
+const ReminderFiring = require('../models/ReminderFiring');
+const ReminderDelivery = require('../models/ReminderDelivery');
+const PushSubscription = require('../models/PushSubscription');
 const { generateInviteCode, inviteExpiry } = require('../utils/inviteCode');
 const { runDailyJob } = require('../services/occurrences');
+const { refreshHousehold } = require('../services/reminders');
 const { todayInZone } = require('../services/time');
 
 dotenv.config();
@@ -104,6 +109,10 @@ async function clearAll() {
     Task.deleteMany(),
     TaskOccurrence.deleteMany(),
     TaskExecution.deleteMany(),
+    Reminder.deleteMany(),
+    ReminderFiring.deleteMany(),
+    ReminderDelivery.deleteMany(),
+    PushSubscription.deleteMany(),
   ]);
 }
 
@@ -206,6 +215,57 @@ async function importData() {
     status: 'pending_review',
   });
 
+  // Lembretes de exemplo: os tres casos que motivaram a funcionalidade.
+  await Reminder.create({
+    household: household._id,
+    title: 'Tomar o remedio',
+    notes: 'Depois do jantar, com um copo de agua.',
+    createdBy: usersByUsername.geissiane._id,
+    schedule: {
+      frequency: 'diaria',
+      startDate: today,
+      time: '21:00',
+    },
+    recipients: [usersByUsername.arthur._id],
+    channels: ['in_app'],
+  });
+
+  await Reminder.create({
+    household: household._id,
+    title: 'Conferir a roupa suja',
+    notes: 'A maquina ja pode lavar?',
+    createdBy: usersByUsername.rodrigo._id,
+    schedule: {
+      frequency: 'semanal',
+      weekdays: [1, 4],
+      startDate: today,
+      time: '08:00',
+    },
+    allMembers: true,
+    channels: ['in_app'],
+  });
+
+  const tarefaDaLouca = tasks.find((item) => item.name === 'Lavar louca');
+
+  await Reminder.create({
+    household: household._id,
+    title: 'A louca foi lavada?',
+    notes: 'So avisa se ainda nao foi.',
+    createdBy: usersByUsername.rodrigo._id,
+    schedule: {
+      frequency: 'diaria',
+      startDate: today,
+      time: '20:00',
+    },
+    recipients: [usersByUsername.geissiane._id],
+    task: tarefaDaLouca._id,
+    skipIfTaskDone: true,
+    channels: ['in_app'],
+  });
+
+  // Materializa os proximos disparos (mesmo gerador do job de cada minuto).
+  const disparos = await refreshHousehold(household);
+
   const pendentes = await TaskOccurrence.countDocuments({ status: 'pending' });
   const aguardandoAvaliacao = await TaskExecution.countDocuments({ status: 'pending_review' });
 
@@ -215,6 +275,7 @@ async function importData() {
   console.log('Senha de todos:    ' + PASSWORD);
   console.log('Ocorrencias pendentes na agenda: ' + pendentes);
   console.log('Execucoes aguardando avaliacao:   ' + aguardandoAvaliacao);
+  console.log('Lembretes de exemplo:             3 (' + disparos + ' disparos materializados)');
   console.log('Usuarios:');
   FAMILY.forEach((member) => {
     console.log('  ' + member.role.padEnd(6) + member.username);

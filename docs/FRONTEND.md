@@ -222,6 +222,39 @@ O executor **nunca** aparece na própria fila, e `rating` é obrigatório. A lis
 [DOMAIN.md § 8](./DOMAIN.md) antes de rotular qualquer número na tela — em especial: **o eixo é a
 data de vencimento**, e a semana começa no **domingo**.
 
+
+### Lembretes — avisos da casa
+
+| Ação | Chamada |
+|---|---|
+| Lembretes da casa | `GET /households/{householdId}/reminders?status&recipient&task&q` |
+| Detalhe (com próximo disparo e minha última notificação) | `GET /reminders/{reminderId}` |
+| Criar | `POST /households/{householdId}/reminders` |
+| Editar | `PATCH /reminders/{reminderId}` |
+| Arquivar / excluir | `DELETE /reminders/{reminderId}?hard=true` |
+| Feito (para mim) | `POST /reminders/{reminderId}/ack` |
+| Adiar (para mim) | `POST /reminders/{reminderId}/snooze` `{ minutes }` |
+| Minhas notificações | `GET /me/notifications?unread` |
+| Marcar como lida | `POST /me/notifications/{deliveryId}/read` |
+| Push: configurar/inscrever/remover | `GET /me/push/config`, `POST`/`DELETE /me/push/subscriptions` |
+
+O corpo do lembrete é `{ title, notes?, schedule, recipients?, allMembers?, channels?, task?, skipIfTaskDone? }`.
+
+Seis coisas que a tela precisa saber:
+
+1. `schedule` usa a **mesma recorrência da tarefa** e acrescenta `time` (hora local da
+   casa). `ocasional` é o disparo único.
+2. `nextFireAt` é instante **UTC**; formate no fuso da casa. O ajudante está em
+   `lib/domain/reminders.ts`.
+3. **"Feito" e "Adiar" são por pessoa** e não desligam a recorrência. Não desenhe "concluir
+   lembrete" — desenhe "feito para mim".
+4. **Criança só cria para si**; "todos" exige `canManageReminders`. A criança também só vê
+   os lembretes que criou ou recebe.
+5. Canal indisponível volta `CHANNEL_NOT_AVAILABLE`. Hoje só `in_app` e `push` existem;
+   não ofereça e-mail/SMS.
+6. Push: a chave pública vem de `GET /me/push/config`; a inscrição é **por aparelho**, e no
+   iOS só funciona com o PWA instalado na Tela de Início (16.4+).
+
 ### Casa — membros e convite
 
 | Ação | Chamada | Quem pode |
@@ -348,6 +381,9 @@ mais.
 | `/tasks/new`, `/tasks/[taskId]/edit` | Formulário de tarefa |
 | `/tasks/[taskId]` | Detalhe da tarefa |
 | `/schedule` | A agenda do horizonte, com concluir e pular ocorrência |
+| `/reminders` | Lembretes da casa, notificações pendentes e push do aparelho |
+| `/reminders/new`, `/reminders/[reminderId]/edit` | Formulário de lembrete |
+| `/reminders/[reminderId]` | Detalhe do lembrete |
 | `/performance` | Os números do período |
 | `/household` | Membros, convite e criação de membro |
 | `/panel` | **Painel da TV** — só leitura, navegação por controle remoto |
@@ -359,6 +395,8 @@ mais.
 - **Escrita**: Server Actions (`app/(app)/{tasks,schedule,household}/actions.ts`).
 - **Só quatro coisas saem do browser**: login, cadastro, troca de senha e logout. Motivo: é a
   própria API que grava o cookie, e numa Server Action o `Set-Cookie` não chegaria ao browser.
+  A exceção é o **push**: inscrição e remoção do aparelho precisam do `PushManager` e da
+  permissão do navegador, então rodam no cliente (`lib/device/push.ts`).
 - Os tipos saem do contrato: `npm run gen:api` lê `docs/openapi.yaml` e regenera
   `lib/domain/api/schema.d.ts`. Não edite esse arquivo à mão.
 

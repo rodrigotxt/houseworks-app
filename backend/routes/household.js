@@ -6,6 +6,7 @@ const router = express.Router();
 
 const householdController = require('../controllers/householdController');
 const householdTaskRoutes = require('./householdTask');
+const householdReminderRoutes = require('./householdReminder');
 const householdExecutionRoutes = require('./householdExecution');
 const householdOccurrenceRoutes = require('./householdOccurrence');
 const householdStatsRoutes = require('./householdStats');
@@ -104,6 +105,7 @@ router.delete(
 
 // Rotas aninhadas: tarefas, execucoes e agenda da casa.
 router.use('/:householdId/tasks', householdTaskRoutes);
+router.use('/:householdId/reminders', householdReminderRoutes);
 router.use('/:householdId/occurrences', householdOccurrenceRoutes);
 router.use('/:householdId/executions', householdExecutionRoutes);
 

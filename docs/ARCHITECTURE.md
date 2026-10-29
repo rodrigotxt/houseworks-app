@@ -59,6 +59,9 @@ um controller, ele provavelmente pertence a um serviço.
 | `services/occurrences.js` | Gerador de ocorrências (idempotente) + backfill + marcação de atraso |
 | `services/executions.js` | Ciclo de vida da execução: concluir, pular, desfazer, avaliar, auto-aprovar |
 | `services/stats.js` | Agregações de desempenho (tudo no MongoDB, via pipeline) |
+| `services/reminders.js` | Motor dos lembretes: materializa disparos, despacha, entrega, adia e marca como feito |
+| `services/channels.js` | Registro dos canais de entrega (`in_app`, `push`; `email`/`sms` reservados) |
+| `services/push.js` | Web Push (VAPID): envia para os aparelhos inscritos e descarta inscrição morta |
 
 ---
 
@@ -231,6 +234,7 @@ Antes de "completar" algo abaixo, verifique se não é uma decisão consciente.
 | Injeção de dependência | O custo de montar um contêiner seria maior que o benefício aqui |
 | Transações no Mongo | Exigem replica set; a alternativa (índice único + operações idempotentes) resolve os casos reais |
 | WebSocket / tempo real | A agenda é consultada por requisição; o app não é colaborativo em tempo real |
+| E-mail e SMS de lembrete | Canais declarados no contrato, mas sem provedor: a criação recusa com `CHANNEL_NOT_AVAILABLE` (D40) |
 | GraphQL | O contrato REST é o acordado com o front |
 | Testes de unidade com mock do Mongoose | Os testes de integração com banco real pegam mais e são quase tão rápidos |
 | `faker`/dados aleatórios nos testes | Números exatos com fixture conhecida provam mais que aproximações |

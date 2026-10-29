@@ -723,6 +723,193 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/households/{householdId}/reminders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Lembretes da casa
+         * @description Lembretes da casa, ordenados por criação (mais novo primeiro). Sem `status`, lista apenas
+         *     os ativos. Quem não tem `canManageReminders` vê somente o que criou ou recebe.
+         */
+        get: operations["listReminders"];
+        put?: never;
+        /**
+         * Criar lembrete
+         * @description Cria um lembrete e materializa os próximos disparos na hora.
+         *
+         *     **Quem pode o quê:** `owner`/`adult` (capacidade `canManageReminders`) criam para
+         *     qualquer membro e para todos; `child` cria apenas para si mesma. Todo destinatário
+         *     precisa ser membro da casa.
+         *
+         *     Um canal indisponível nesta instalação (hoje: `email` e `sms`) é recusado com
+         *     `CHANNEL_NOT_AVAILABLE` — melhor recusar do que aceitar um aviso que nunca sai.
+         */
+        post: operations["createReminder"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/reminders/{reminderId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Detalhe do lembrete
+         * @description Inclui o próximo disparo e a minha última notificação deste lembrete.
+         */
+        get: operations["getReminder"];
+        put?: never;
+        post?: never;
+        /**
+         * Arquivar (padrão) ou excluir o lembrete
+         * @description Sem `hard`, arquiva — o histórico de notificações continua. Com `hard=true`, apaga o
+         *     lembrete, os disparos e as notificações; exige papel `owner`.
+         */
+        delete: operations["deleteReminder"];
+        options?: never;
+        head?: never;
+        /**
+         * Atualizar lembrete
+         * @description Qualquer mudança que afete a entrega (horário, destinatários, canais, tarefa) vale do
+         *     próximo disparo em diante: os disparos futuros são recalculados, os já entregues ficam.
+         */
+        patch: operations["updateReminder"];
+        trace?: never;
+    };
+    "/reminders/{reminderId}/ack": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Marcar como feito
+         * @description Marca a última notificação deste lembrete para mim como vista e resolvida. Não interrompe
+         *     a recorrência: o remédio das 21h continua valendo amanhã. Só quem recebe pode.
+         */
+        post: operations["acknowledgeReminder"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/reminders/{reminderId}/snooze": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Adiar o lembrete
+         * @description Cria um disparo avulso, só para quem pediu, daqui a N minutos.
+         */
+        post: operations["snoozeReminder"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/notifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Minhas notificações
+         * @description O que os lembretes já dispararam para mim, mais novo primeiro.
+         */
+        get: operations["listMyNotifications"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/notifications/{deliveryId}/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Marcar notificação como lida */
+        post: operations["markNotificationRead"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/push/config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Configuração de push
+         * @description Devolve a chave pública VAPID que o navegador usa em `pushManager.subscribe`. Com
+         *     `enabled: false`, o canal `push` não existe nesta instalação e o app usa só o in_app.
+         */
+        get: operations["getPushConfig"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/push/subscriptions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Meus aparelhos inscritos */
+        get: operations["listPushSubscriptions"];
+        put?: never;
+        /**
+         * Inscrever este aparelho
+         * @description Idempotente por `endpoint`: inscrever de novo atualiza as chaves. Se o mesmo navegador
+         *     tiver trocado de conta, a inscrição passa para o novo usuário.
+         */
+        post: operations["subscribePush"];
+        /**
+         * Remover a inscrição deste aparelho
+         * @description Idempotente; o aparelho é identificado pelo `endpoint`.
+         */
+        delete: operations["unsubscribePush"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -731,7 +918,7 @@ export interface components {
          * @description Catálogo estável de códigos de erro. O cliente decide por este campo, nunca pelo texto de `message`.
          * @enum {string}
          */
-        ErrorCode: "VALIDATION_ERROR" | "INVALID_DATE_RANGE" | "UNAUTHENTICATED" | "TOKEN_EXPIRED" | "TOKEN_INVALID" | "INVALID_CREDENTIALS" | "EMAIL_ALREADY_REGISTERED" | "USERNAME_ALREADY_REGISTERED" | "RATE_LIMITED" | "FORBIDDEN" | "NOT_HOUSEHOLD_MEMBER" | "INSUFFICIENT_ROLE" | "HOUSEHOLD_NOT_FOUND" | "INVITE_CODE_INVALID" | "MEMBER_NOT_FOUND" | "DUPLICATE_MEMBER" | "LAST_OWNER_CANNOT_LEAVE" | "ROUTE_NOT_FOUND" | "TASK_NOT_FOUND" | "TASK_ARCHIVED" | "OCCURRENCE_NOT_FOUND" | "OCCURRENCE_ALREADY_COMPLETED" | "OCCURRENCE_NOT_COMPLETED" | "OCCURRENCE_NOT_ASSIGNED_TO_YOU" | "EXECUTION_NOT_FOUND" | "EXECUTION_ALREADY_RATED" | "CANNOT_RATE_OWN_EXECUTION" | "RATING_WINDOW_CLOSED" | "CONFLICT" | "INTERNAL_ERROR" | "SERVICE_UNAVAILABLE";
+        ErrorCode: "VALIDATION_ERROR" | "INVALID_DATE_RANGE" | "UNAUTHENTICATED" | "TOKEN_EXPIRED" | "TOKEN_INVALID" | "INVALID_CREDENTIALS" | "EMAIL_ALREADY_REGISTERED" | "USERNAME_ALREADY_REGISTERED" | "RATE_LIMITED" | "FORBIDDEN" | "NOT_HOUSEHOLD_MEMBER" | "INSUFFICIENT_ROLE" | "HOUSEHOLD_NOT_FOUND" | "INVITE_CODE_INVALID" | "MEMBER_NOT_FOUND" | "DUPLICATE_MEMBER" | "LAST_OWNER_CANNOT_LEAVE" | "ROUTE_NOT_FOUND" | "TASK_NOT_FOUND" | "TASK_ARCHIVED" | "OCCURRENCE_NOT_FOUND" | "OCCURRENCE_ALREADY_COMPLETED" | "OCCURRENCE_NOT_COMPLETED" | "OCCURRENCE_NOT_ASSIGNED_TO_YOU" | "EXECUTION_NOT_FOUND" | "REMINDER_NOT_FOUND" | "DELIVERY_NOT_FOUND" | "REMINDER_NOT_ASSIGNED_TO_YOU" | "CHANNEL_NOT_AVAILABLE" | "PUSH_NOT_CONFIGURED" | "EXECUTION_ALREADY_RATED" | "CANNOT_RATE_OWN_EXECUTION" | "RATING_WINDOW_CLOSED" | "CONFLICT" | "INTERNAL_ERROR" | "SERVICE_UNAVAILABLE";
         ValidationIssue: {
             /**
              * @description Caminho do campo inválido (ex. `recurrence.weekdays`).
@@ -859,6 +1046,11 @@ export interface components {
                 canRate: boolean;
                 canManageTasks: boolean;
                 canManageMembers: boolean;
+                /**
+                 * @description Administrar lembretes de QUALQUER membro (e criar para todos). Sem esta
+                 *     capacidade, a pessoa ainda cria e edita os próprios lembretes, só para si.
+                 */
+                canManageReminders: boolean;
             };
             /** Format: date-time */
             joinedAt: string;
@@ -1454,6 +1646,228 @@ export interface components {
              */
             note?: string;
         };
+        /**
+         * @description Canal de entrega. in_app é sempre possível (a caixa de notificações do app).
+         *     push é Web Push do PWA. email e sms estão reservados: o contrato já os conhece,
+         *     mas hoje são recusados com CHANNEL_NOT_AVAILABLE.
+         * @enum {string}
+         */
+        ReminderChannel: "in_app" | "push" | "email" | "sms";
+        /**
+         * @description Quando o lembrete toca. Reaproveita a mesma expansão de recorrência das tarefas
+         *     (frequency, interval, weekdays, dayOfMonth, startDate, endDate) e acrescenta a
+         *     HORA local da casa. "ocasional" é o disparo único.
+         */
+        ReminderSchedule: {
+            /**
+             * @description Mesma semântica de Recurrence.frequency. "ocasional" dispara uma única vez, em
+             *     startDate, e o lembrete é arquivado depois de tocar.
+             * @example diaria
+             * @enum {string}
+             */
+            frequency: "diaria" | "semanal" | "mensal" | "anual" | "ocasional";
+            /**
+             * @default 1
+             * @example 1
+             */
+            interval: number;
+            /**
+             * @description Dias da semana (0 = domingo). Obrigatório no semanal.
+             * @example [
+             *       1,
+             *       3,
+             *       5
+             *     ]
+             */
+            weekdays?: number[];
+            /**
+             * @description Dia do mês no mensal/anual. Sem ele, vale o dia de startDate.
+             * @example 5
+             */
+            dayOfMonth?: number;
+            /** @example 2025-07-10 */
+            startDate: string;
+            /** @description Opcional. Depois dela o lembrete para de tocar. */
+            endDate?: string;
+            /**
+             * @description Hora local da casa, 24 horas.
+             * @example 21:00
+             */
+            time: string;
+        };
+        /** @description Referência curta à tarefa vinculada (quando o lembrete é "conferir se foi feito"). */
+        ReminderTaskRef: {
+            id: string;
+            name: string;
+            /** @enum {string} */
+            status: "active" | "archived";
+        };
+        /** @description Aviso agendado da casa. Não gera ponto, execução nem nota. */
+        Reminder: {
+            id: string;
+            householdId: string;
+            /** @example Tomar o remédio */
+            title: string;
+            /** @example Depois do jantar, com um copo de água. */
+            notes?: string;
+            createdBy: components["schemas"]["UserRef"];
+            schedule: components["schemas"]["ReminderSchedule"];
+            /** @description Quem recebe. Vazio quando allMembers é true. */
+            recipients: components["schemas"]["UserRef"][];
+            /**
+             * @description Todos os membros, resolvidos NO MOMENTO DO DISPARO: quem entrar depois passa a
+             *     receber, quem sair para de receber.
+             */
+            allMembers: boolean;
+            channels: components["schemas"]["ReminderChannel"][];
+            /** @description Tarefa vinculada — o lembrete vira "conferir se já foi feito". */
+            task?: components["schemas"]["ReminderTaskRef"] | null;
+            /**
+             * @description Com tarefa vinculada, não dispara quando a ocorrência daquele dia já está done
+             *     ou skipped. Padrão true.
+             */
+            skipIfTaskDone: boolean;
+            /**
+             * @default active
+             * @enum {string}
+             */
+            status: "active" | "paused" | "archived";
+            /** @description Próximo disparo, em UTC. null quando não há mais disparo previsto. */
+            nextFireAt: string | null;
+            archivedAt?: string | null;
+            /** @description Minha última notificação deste lembrete. Só no detalhe (GET /reminders/{id}). */
+            myDelivery?: components["schemas"]["ReminderNotification"] | null;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt?: string;
+        };
+        /** @description Resumo do lembrete dentro de uma notificação. */
+        ReminderSummary: {
+            id: string;
+            title: string;
+            notes?: string;
+            schedule: components["schemas"]["ReminderSchedule"];
+            channels: components["schemas"]["ReminderChannel"][];
+            /** @enum {string} */
+            status: "active" | "paused" | "archived";
+        };
+        /** @description O que aconteceu com um canal naquela entrega. */
+        ReminderChannelResult: {
+            channel: components["schemas"]["ReminderChannel"];
+            /** @enum {string} */
+            status: "sent" | "skipped" | "failed";
+            sentAt?: string | null;
+            /**
+             * @description Motivo curto quando não foi enviado: sem_inscricao, push_nao_configurado, canal_indisponivel.
+             * @example sem_inscricao
+             */
+            reason?: string;
+        };
+        /**
+         * @description Uma entrega de lembrete para uma pessoa — a unidade da caixa de notificações.
+         *     readAt (viu) e acknowledgedAt (resolveu) são diferentes de propósito.
+         */
+        ReminderNotification: {
+            id: string;
+            reminder: components["schemas"]["ReminderSummary"];
+            channels: components["schemas"]["ReminderChannelResult"][];
+            readAt?: string | null;
+            acknowledgedAt?: string | null;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        /** @description Um disparo materializado (agendado, entregue, pulado ou adiado). */
+        ReminderFiring: {
+            id: string;
+            reminderId: string;
+            /** Format: date-time */
+            fireAt: string;
+            localDate: string;
+            localTime: string;
+            /** @enum {string} */
+            kind: "schedule" | "snooze";
+            /** @enum {string} */
+            status: "scheduled" | "processing" | "delivered" | "skipped" | "cancelled" | "missed";
+            /** @example tarefa_concluida */
+            reason?: string | null;
+            deliveredAt?: string | null;
+            /** Format: date-time */
+            createdAt?: string;
+        };
+        CreateReminderRequest: {
+            /** @example Tomar o remédio */
+            title: string;
+            /** @example Depois do jantar. */
+            notes?: string;
+            schedule: components["schemas"]["ReminderSchedule"];
+            /** @description Quem recebe. Omitido, o lembrete é para quem cria. Proibido junto com allMembers. */
+            recipients?: string[];
+            /**
+             * @description Todos os membros da casa. Só quem tem canManageReminders pode usar.
+             * @default false
+             */
+            allMembers: boolean;
+            /**
+             * @default [
+             *       "in_app"
+             *     ]
+             */
+            channels: components["schemas"]["ReminderChannel"][];
+            /** @description Tarefa vinculada (opcional). */
+            task?: string | null;
+            /** @default true */
+            skipIfTaskDone: boolean;
+        };
+        /** @description Ao menos um campo. Desligar allMembers exige informar recipients. */
+        UpdateReminderRequest: {
+            title?: string;
+            notes?: string;
+            schedule?: components["schemas"]["ReminderSchedule"];
+            recipients?: string[];
+            allMembers?: boolean;
+            channels?: components["schemas"]["ReminderChannel"][];
+            task?: string | null;
+            skipIfTaskDone?: boolean;
+            /** @enum {string} */
+            status?: "active" | "paused" | "archived";
+        };
+        SnoozeReminderRequest: {
+            /** @example 15 */
+            minutes: number;
+        };
+        PushConfig: {
+            /**
+             * @description O canal push existe nesta instalação? Depende de VAPID_PUBLIC_KEY e
+             *     VAPID_PRIVATE_KEY no servidor. Sem elas, o app segue com o canal in_app.
+             */
+            enabled: boolean;
+            /** @description Chave pública VAPID (applicationServerKey) para o pushManager.subscribe. */
+            publicKey?: string | null;
+        };
+        PushSubscription: {
+            id: string;
+            /** Format: uri */
+            endpoint: string;
+            userAgent?: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            lastSeenAt?: string;
+        };
+        CreatePushSubscriptionRequest: {
+            /** Format: uri */
+            endpoint: string;
+            keys: {
+                p256dh: string;
+                auth: string;
+            };
+            userAgent?: string;
+        };
+        DeletePushSubscriptionRequest: {
+            /** Format: uri */
+            endpoint: string;
+        };
     };
     responses: {
         /** @description Requisição inválida (falha de validação de entrada ou parâmetros incoerentes). */
@@ -1541,6 +1955,10 @@ export interface components {
         OccurrenceId: string;
         /** @description Identificador da execução. */
         ExecutionId: string;
+        /** @description Identificador do lembrete. */
+        ReminderId: string;
+        /** @description Identificador de uma notificação (entrega de lembrete). */
+        DeliveryId: string;
         /** @description Identificador do usuário membro da casa. */
         MemberUserId: string;
         Page: number;
@@ -2846,6 +3264,395 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             403: components["responses"]["NotMember"];
+        };
+    };
+    listReminders: {
+        parameters: {
+            query?: {
+                /** @description all inclui ativos, pausados e arquivados. */
+                status?: "active" | "paused" | "archived" | "all";
+                /** @description Restringe aos lembretes que uma pessoa recebe. `me` é o próprio usuário. */
+                recipient?: string;
+                /** @description Restringe aos lembretes vinculados a uma tarefa. */
+                task?: string;
+                /** @description Busca no título. */
+                q?: string;
+                /**
+                 * @description Campo de ordenação; prefixo `-` para decrescente.
+                 *     Exemplos: `dueDate`, `-dueDate`, `name`, `-createdAt`.
+                 */
+                sort?: components["parameters"]["Sort"];
+                page?: components["parameters"]["Page"];
+                pageSize?: components["parameters"]["PageSize"];
+            };
+            header?: never;
+            path: {
+                /** @description Identificador da casa. */
+                householdId: components["parameters"]["HouseholdId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Lembretes da casa. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["Reminder"][];
+                        meta: components["schemas"]["PageMeta"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["NotMember"];
+        };
+    };
+    createReminder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identificador da casa. */
+                householdId: components["parameters"]["HouseholdId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateReminderRequest"];
+            };
+        };
+        responses: {
+            /** @description Lembrete criado. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["Reminder"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["InsufficientRole"];
+        };
+    };
+    getReminder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identificador do lembrete. */
+                reminderId: components["parameters"]["ReminderId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Lembrete. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["Reminder"];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteReminder: {
+        parameters: {
+            query?: {
+                hard?: boolean;
+            };
+            header?: never;
+            path: {
+                /** @description Identificador do lembrete. */
+                reminderId: components["parameters"]["ReminderId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Arquivado ou excluído. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["InsufficientRole"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateReminder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identificador do lembrete. */
+                reminderId: components["parameters"]["ReminderId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateReminderRequest"];
+            };
+        };
+        responses: {
+            /** @description Lembrete atualizado. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["Reminder"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["InsufficientRole"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    acknowledgeReminder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identificador do lembrete. */
+                reminderId: components["parameters"]["ReminderId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Notificação atualizada. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["ReminderNotification"];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["InsufficientRole"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    snoozeReminder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identificador do lembrete. */
+                reminderId: components["parameters"]["ReminderId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SnoozeReminderRequest"];
+            };
+        };
+        responses: {
+            /** @description Disparo adiado. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["ReminderFiring"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["InsufficientRole"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listMyNotifications: {
+        parameters: {
+            query?: {
+                /** @description true só as não lidas; false só as lidas. */
+                unread?: "true" | "false";
+                page?: components["parameters"]["Page"];
+                pageSize?: components["parameters"]["PageSize"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Minhas notificações. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["ReminderNotification"][];
+                        meta: components["schemas"]["PageMeta"];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+        };
+    };
+    markNotificationRead: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identificador de uma notificação (entrega de lembrete). */
+                deliveryId: components["parameters"]["DeliveryId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Notificação atualizada. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["ReminderNotification"];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getPushConfig: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Configuração. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["PushConfig"];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+        };
+    };
+    listPushSubscriptions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Inscrições do usuário. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["PushSubscription"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+        };
+    };
+    subscribePush: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreatePushSubscriptionRequest"];
+            };
+        };
+        responses: {
+            /** @description Inscrição atualizada. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["PushSubscription"];
+                    };
+                };
+            };
+            /** @description Inscrição criada. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["PushSubscription"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+        };
+    };
+    unsubscribePush: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeletePushSubscriptionRequest"];
+            };
+        };
+        responses: {
+            /** @description Removida (ou já não existia). */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
         };
     };
 }

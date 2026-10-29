@@ -7,9 +7,21 @@
 //
 // Manter em sincronia com services/executions.js do backend.
 
-import type { Difficulty, Household, Membership, TaskExecution, TaskOccurrence } from './api/types';
+import type {
+  Difficulty,
+  Household,
+  Membership,
+  Reminder,
+  TaskExecution,
+  TaskOccurrence,
+} from './api/types';
 
-export type Capability = 'canAssign' | 'canRate' | 'canManageTasks' | 'canManageMembers';
+export type Capability =
+  | 'canAssign'
+  | 'canRate'
+  | 'canManageTasks'
+  | 'canManageMembers'
+  | 'canManageReminders';
 
 /** Pontuacao derivada da dificuldade — espelho de utils/points.js. */
 export const POINTS_BY_DIFFICULTY: Record<Difficulty, number> = {
@@ -153,6 +165,32 @@ export function completionProgress(occurrences: Pick<TaskOccurrence, 'status'>[]
   return { total, done, late, rate: total === 0 ? 0 : done / total };
 }
 
+// ---- lembretes ----
+
+/** Quem administra lembretes cria para qualquer membro (e para todos). */
+export function canManageReminders(membership?: Membership | null): boolean {
+  return hasCapability(membership, 'canManageReminders');
+}
+
+/** Adulto/owner edita qualquer lembrete; a criança, apenas os que criou. */
+export function canEditReminder(
+  membership: Membership | undefined | null,
+  reminder: Pick<Reminder, 'createdBy'>,
+  userId?: string
+): boolean {
+  if (canManageReminders(membership)) return true;
+  return reminder.createdBy?.id === userId;
+}
+
+/** Destinatário: escolhido explicitamente ou coberto pelo "todos". */
+export function isReminderRecipient(
+  reminder: Pick<Reminder, 'allMembers' | 'recipients'>,
+  userId?: string
+): boolean {
+  if (reminder.allMembers) return true;
+  return (reminder.recipients ?? []).some((pessoa) => pessoa.id === userId);
+}
+
 // ---- membros ----
 
 export type Role = Membership['role'];
@@ -170,9 +208,27 @@ export type Role = Membership['role'];
  * recalcula tudo e continua sendo a unica autoridade.
  */
 export const ROLE_CAPABILITIES: Record<Role, Record<Capability, boolean>> = {
-  owner: { canAssign: true, canRate: true, canManageTasks: true, canManageMembers: true },
-  adult: { canAssign: true, canRate: true, canManageTasks: true, canManageMembers: false },
-  child: { canAssign: false, canRate: false, canManageTasks: false, canManageMembers: false },
+  owner: {
+    canAssign: true,
+    canRate: true,
+    canManageTasks: true,
+    canManageMembers: true,
+    canManageReminders: true,
+  },
+  adult: {
+    canAssign: true,
+    canRate: true,
+    canManageTasks: true,
+    canManageMembers: false,
+    canManageReminders: true,
+  },
+  child: {
+    canAssign: false,
+    canRate: false,
+    canManageTasks: false,
+    canManageMembers: false,
+    canManageReminders: false,
+  },
 };
 
 /** Ordem em que as capacidades aparecem na tela: da mais ampla para a mais pontual. */
@@ -180,6 +236,7 @@ export const CAPABILITIES: Capability[] = [
   'canManageTasks',
   'canAssign',
   'canRate',
+  'canManageReminders',
   'canManageMembers',
 ];
 

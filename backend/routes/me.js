@@ -6,6 +6,8 @@ const router = express.Router();
 
 const occurrenceController = require('../controllers/occurrenceController');
 const statsController = require('../controllers/statsController');
+const notificationRoutes = require('./notification');
+const pushRoutes = require('./push');
 const { requireAuth } = require('../middlewares/auth');
 const validate = require('../middlewares/validate');
 const asyncHandler = require('../utils/asyncHandler');
@@ -31,5 +33,9 @@ router.get(
   validate({ query: scoreQuerySchema }),
   asyncHandler(statsController.myScore)
 );
+
+// Notificacoes (lembretes que ja dispararam) e inscricoes de Web Push.
+router.use('/notifications', notificationRoutes);
+router.use('/push', pushRoutes);
 
 module.exports = router;

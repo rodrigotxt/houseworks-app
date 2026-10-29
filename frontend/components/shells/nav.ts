@@ -6,6 +6,7 @@
 
 import BarChartIcon from '@mui/icons-material/BarChart';
 import GroupsIcon from '@mui/icons-material/Groups';
+import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive';
 import TaskAltIcon from '@mui/icons-material/TaskAlt';
 import ViewListIcon from '@mui/icons-material/ViewList';
 
@@ -20,6 +21,7 @@ export interface NavItem {
 export const NAV_ITEMS: NavItem[] = [
   { href: '/tasks', label: 'Tarefas', shortLabel: 'Tarefas', icon: TaskAltIcon },
   { href: '/schedule', label: 'Cronograma', shortLabel: 'Agenda', icon: ViewListIcon },
+  { href: '/reminders', label: 'Lembretes', shortLabel: 'Avisos', icon: NotificationsActiveIcon },
   { href: '/performance', label: 'Desempenho', shortLabel: 'Placar', icon: BarChartIcon },
   { href: '/household', label: 'Casa', shortLabel: 'Casa', icon: GroupsIcon },
 ];

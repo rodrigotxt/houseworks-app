@@ -95,6 +95,7 @@ const updateMemberSchema = z
         canRate: z.boolean().optional(),
         canManageTasks: z.boolean().optional(),
         canManageMembers: z.boolean().optional(),
+        canManageReminders: z.boolean().optional(),
       })
       .optional(),
     // null LIMPA: volta a "nunca configurado", que e diferente de zero.

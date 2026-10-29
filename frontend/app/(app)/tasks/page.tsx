@@ -28,7 +28,7 @@ import EmptyState from '@/components/ui/EmptyState';
 import PageHeader from '@/components/ui/PageHeader';
 import { isApiError } from '@/lib/domain/api';
 import { DIFFICULTY_LABELS, describeRecurrence } from '@/lib/domain/labels';
-import { canCreateTask } from '@/lib/domain/rules';
+import { canCreateTask, canEditTask } from '@/lib/domain/rules';
 import { requireContext, serverApi } from '@/lib/session/server';
 
 export const metadata: Metadata = { title: 'Tarefas' };
@@ -52,6 +52,9 @@ export default async function TasksPage({ searchParams }: Props) {
     });
 
     const podeCriar = canCreateTask(membership);
+    // Mesma capacidade hoje, mas nomeada pela regra certa: editar nao e criar, e a lista
+    // deve seguir o que a regra de edicao disser se as duas divergirem um dia.
+    const podeEditar = canEditTask(membership);
     const filtrando = Boolean(q);
     const base = '/tasks?status=' + status;
 
@@ -157,6 +160,18 @@ export default async function TasksPage({ searchParams }: Props) {
                               : 'Qualquer um'
                         }
                       />
+
+                      {/* A edicao existia so dentro da ficha, e quem procurava na lista nao
+                          achava. O caminho curto precisa estar onde a tarefa aparece. */}
+                      {podeEditar && (
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          href={'/tasks/' + tarefa.id + '/edit'}
+                        >
+                          Editar
+                        </Button>
+                      )}
                     </Stack>
                   </Box>
                 </CardContent>

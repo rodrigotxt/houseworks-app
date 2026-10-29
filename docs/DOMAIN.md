@@ -88,6 +88,7 @@ papel. Expostas como o virtual `capabilities`.
 | `canAssign` (designar responsável) | ✅ | ✅ | ❌ |
 | `canRate` (avaliar execução de outro) | ✅ | ✅ | ❌ |
 | `canManageMembers` | ✅ | ❌ | ❌ |
+| `canManageReminders` (criar/editar lembrete de qualquer membro, e para todos) | ✅ | ✅ | ❌ |
 
 **Invariante do último owner:** a casa nunca fica sem `owner`. Rebaixar ou remover o último
 retorna `409 LAST_OWNER_CANNOT_LEAVE`.
@@ -154,6 +155,83 @@ da mesma tarefa no mesmo dia — é isso que permite rodar o gerador quantas vez
   quem executou.
 - O `dueDate` copiado não pode divergir: o `dueDate` de uma ocorrência nunca muda, e as únicas
   operações que apagam ocorrências levam as execuções junto.
+
+
+### Reminder
+
+O aviso. Diferente da tarefa, **não gera ocorrência, execução, nota nem ponto** — ele só
+precisa chegar na hora. É o que cobre "tomar o remédio às 21h", "conferir se a máquina já
+pode lavar" e "checar se a tarefa foi feita".
+
+| Campo | Notas |
+|---|---|
+| `household` | obrigatório, como todo documento de domínio |
+| `title`, `notes` | 3–100 / até 500 |
+| `createdBy` | quem criou; limita a criança, que só administra os próprios |
+| `schedule` | recorrência (mesma da tarefa) **+ `time` local da casa** |
+| `recipients` | destinatários explícitos; vazio quando `allMembers` |
+| `allMembers` | "todos", resolvido **no disparo** contra a Membership |
+| `channels` | `in_app`, `push` (hoje); `email`, `sms` reservados |
+| `task` | vínculo opcional: "conferir se foi feita" |
+| `skipIfTaskDone` | com tarefa, não avisa quando a ocorrência do dia já está `done`/`skipped` |
+| `status` | `active` / `paused` / `archived` |
+| `firingsGeneratedUntil` | controle interno do gerador; nunca serializado |
+
+**Invariantes:**
+- `allMembers` e `recipients` se excluem: um dos dois, nunca os dois.
+- Todo destinatário precisa ser membro da casa.
+- Canal indisponível nesta instalação é recusado na criação (`CHANNEL_NOT_AVAILABLE`) —
+  aceitar um canal que nunca entrega seria pior que recusar.
+- **Criança cria e edita apenas os próprios lembretes, e apenas para si.** Adulto e owner
+  (capacidade `canManageReminders`) criam para qualquer membro e para todos.
+- Um lembrete `ocasional` (disparo único) é arquivado depois de tocar.
+
+### ReminderFiring
+
+O disparo materializado: o instante concreto em que o lembrete toca. É o espelho da
+`TaskOccurrence`, com outro recorte — a ocorrência é uma obrigação; o disparo é um aviso.
+
+| Campo | Notas |
+|---|---|
+| `reminder`, `household` | |
+| `fireAt` | instante **UTC**; é o que o despachante compara |
+| `localDate`, `localTime` | dia e hora locais da casa, desnormalizados |
+| `kind` | `schedule` / `snooze` (adiamento de uma pessoa) |
+| `user` | só no `snooze` |
+| `status` | `scheduled` → `processing` → `delivered`, `skipped`, `cancelled` ou `missed` |
+| `reason` | `tarefa_concluida`, `sem_destinatarios`, `janela_expirada`, … |
+
+**Invariante de idempotência:** índice **único** `{reminder, fireAt, user}`. Não existem
+dois disparos do mesmo lembrete no mesmo instante — é isso que permite o job rodar em
+duas réplicas sem entregar duas vezes.
+
+### ReminderDelivery
+
+A entrega para **uma pessoa** — a unidade da caixa de notificações.
+
+| Campo | Notas |
+|---|---|
+| `firing`, `reminder`, `household`, `user` | |
+| `channels` | resultado por canal: `sent`, `skipped` ou `failed`, com motivo |
+| `readAt` | viu |
+| `acknowledgedAt` | resolveu ("feito") |
+
+**Invariantes:**
+- **Uma entrega por `{firing, user}`** (índice único).
+- `readAt` e `acknowledgedAt` são **separados**: ler não é resolver.
+- "Feito" **não interrompe a recorrência** — o remédio de hoje não cancela o de amanhã.
+- O canal é por entrega: o push pode falhar no aparelho de um filho enquanto o in_app
+  funciona para todos.
+
+### PushSubscription
+
+Inscrição de Web Push de um **aparelho**. É a **exceção consciente** à invariante "todo
+documento de domínio tem `household`": o aparelho é do usuário, não da casa, e o mesmo
+celular recebe avisos de duas casas. Como `RevokedToken`, é documento de
+identidade/infraestrutura.
+
+**Invariantes:** o `endpoint` é único; as chaves (`p256dh`, `auth`) nunca são
+serializadas. Um 404/410 do serviço de push remove a inscrição morta.
 
 ### RevokedToken
 
@@ -367,7 +445,86 @@ esconde exatamente a informação que interessa.
 
 ---
 
-## 9. Catálogo de erros
+
+## 9. Lembretes
+
+### 9.1 O que é e o que não é
+
+Um lembrete é um **aviso**, não um dever. Não há ocorrência, execução, nota, ponto nem
+placar. O que ele tem é hora, destinatários e canais.
+
+Isso permite os casos que a tarefa não cobre bem: tomar um remédio todos os dias às 21h,
+conferir se a máquina já pode lavar, ou ser avisado de uma tarefa que **ainda não foi
+feita** (o vínculo com `task`).
+
+### 9.2 Recorrência e hora
+
+O `schedule` reaproveita a mesma expansão de §3 (`diaria`, `semanal`, `mensal`,
+`anual`, `ocasional`) e acrescenta **`time`**, a hora local da casa. `ocasional` é o
+disparo único.
+
+A conversão de "21:00 na casa" para instante absoluto acontece **só** em
+`services/reminders.js` (`fireAtFor`), com o fuso da `Household`. O resto do domínio
+continua comparando strings de dia.
+
+### 9.3 Disparo: materializar, despachar, entregar
+
+`@
+Reminder (regra)
+   |  materializa até 7 dias à frente
+   v
+ReminderFiring (instante concreto, status scheduled)
+   |  job de cada minuto / claim atômico
+   v
+ReminderDelivery (uma por destinatário)
+   |  canais: in_app, push
+   v
+caixa de notificações + serviço de push do navegador
+`@
+
+Três garantias:
+
+1. **Idempotência** pelo índice único `{reminder, fireAt, user}` — não por checagem em
+   memória.
+2. **Janela curta**: um disparo atrasado mais de 10 minutos vira `missed`, não chega fora
+   de hora. Remédio às 21h entregue às 9h do dia seguinte é pior que nenhum aviso. Por
+   isso **não há backfill do passado**, ao contrário das ocorrências.
+3. **Sem duplicação entre réplicas**: o disparo é reivindicado com
+   `findOneAndUpdate({status:'scheduled'} → 'processing')`.
+
+A leitura da lista materializa os próximos disparos (como a agenda faz backfill); o job
+de cada minuto é quem **despacha**. Sem o job, nada toca.
+
+### 9.4 Canais
+
+| Canal | Hoje | Como chega |
+|---|---|---|
+| `in_app` | sempre | a própria `ReminderDelivery` na caixa de notificações |
+| `push` | se o servidor tiver VAPID | Web Push do PWA, por aparelho inscrito |
+| `email`, `sms` | não | reservados no contrato; criação recusa |
+
+Um canal que falha não derruba os outros: o in_app é gravado mesmo quando o push do
+aparelho morre. O resultado de cada canal fica registrado na entrega.
+
+### 9.5 Feito, adiar e "todos"
+
+- **Feito** marca a última notificação como lida e resolvida. **Não** desliga a
+  recorrência — é o que impede que tomar o remédio hoje cancele o de amanhã.
+- **Adiar** cria um disparo `snooze` só para quem pediu, daqui a N minutos (1–1440).
+  O adiamento é individual.
+- **Todos** é dinâmico: resolvido contra a `Membership` no momento do disparo. Quem entra
+  na casa depois passa a receber; quem sai para de receber.
+
+### 9.6 Lembrete vinculado a tarefa
+
+Com `task` preenchida e `skipIfTaskDone` (padrão `true`), o disparo é **pulado**
+quando a ocorrência daquele dia já está `done` ou `skipped`. É o caso "checar se a
+tarefa foi concluída": o sistema checa, e só incomoda quando ainda falta. O pulo fica
+registrado com `reason: 'tarefa_concluida'`.
+
+---
+
+## 10. Catálogo de erros
 
 O contrato é a fonte de verdade (`ErrorCode` em `openapi.yaml`), e `utils/errorCodes.js` espelha.
 **O cliente decide pelo `code`, nunca pelo texto da mensagem.**
@@ -377,13 +534,14 @@ O contrato é a fonte de verdade (`ErrorCode` em `openapi.yaml`), e `utils/error
 | Entrada | `VALIDATION_ERROR`, `INVALID_DATE_RANGE` |
 | Autenticação | `UNAUTHENTICATED`, `TOKEN_EXPIRED`, `TOKEN_INVALID`, `INVALID_CREDENTIALS`, `EMAIL_ALREADY_REGISTERED`, `USERNAME_ALREADY_REGISTERED`, `RATE_LIMITED` |
 | Autorização | `FORBIDDEN`, `NOT_HOUSEHOLD_MEMBER`, `INSUFFICIENT_ROLE`, `HOUSEHOLD_NOT_FOUND`, `INVITE_CODE_INVALID`, `MEMBER_NOT_FOUND`, `DUPLICATE_MEMBER`, `LAST_OWNER_CANNOT_LEAVE` |
-| Recursos | `ROUTE_NOT_FOUND`, `TASK_NOT_FOUND`, `TASK_ARCHIVED`, `OCCURRENCE_NOT_FOUND`, `OCCURRENCE_ALREADY_COMPLETED`, `OCCURRENCE_NOT_COMPLETED`, `OCCURRENCE_NOT_ASSIGNED_TO_YOU`, `EXECUTION_NOT_FOUND` |
+| Recursos | `ROUTE_NOT_FOUND`, `TASK_NOT_FOUND`, `TASK_ARCHIVED`, `OCCURRENCE_NOT_FOUND`, `OCCURRENCE_ALREADY_COMPLETED`, `OCCURRENCE_NOT_COMPLETED`, `OCCURRENCE_NOT_ASSIGNED_TO_YOU`, `EXECUTION_NOT_FOUND`, `REMINDER_NOT_FOUND`, `DELIVERY_NOT_FOUND` |
+| Lembretes e canais | `REMINDER_NOT_ASSIGNED_TO_YOU`, `CHANNEL_NOT_AVAILABLE`, `PUSH_NOT_CONFIGURED` |
 | Regras | `EXECUTION_ALREADY_RATED`, `CANNOT_RATE_OWN_EXECUTION`, `RATING_WINDOW_CLOSED`, `CONFLICT` |
 | Servidor | `INTERNAL_ERROR`, `SERVICE_UNAVAILABLE` |
 
 ---
 
-## 10. Invariantes que não podem ser violadas
+## 11. Invariantes que não podem ser violadas
 
 Uma lista curta para consultar antes de mexer:
 
@@ -402,3 +560,10 @@ Uma lista curta para consultar antes de mexer:
 12. **Dia de calendário é string `YYYY-MM-DD`**, comparada no fuso da casa.
 13. **Erro sempre pelo envelope**, com código do catálogo e `requestId`.
 14. **Entrada sempre validada por schema estrito** — campo fora do contrato é rejeitado.
+15. **Um lembrete tem destinatários OU `allMembers`**, nunca os dois; todo destinatário é
+    membro da casa.
+16. **Um disparo por `{reminder, fireAt, user}`** — é o que impede entrega dupla.
+17. **Criança só cria e edita lembrete para si**; "todos" exige `canManageReminders`.
+18. **"Feito" não interrompe a recorrência** — só resolve aquela notificação, para aquela
+    pessoa.
+19. **Push é por aparelho, não por casa** (`PushSubscription` não carrega `household`).

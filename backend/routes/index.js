@@ -14,6 +14,7 @@ const householdRoutes = require('./household');
 const taskRoutes = require('./task');
 const occurrenceRoutes = require('./occurrence');
 const executionRoutes = require('./execution');
+const reminderRoutes = require('./reminder');
 const meRoutes = require('./me');
 
 // GET /health — smoke test de integracao e healthcheck do container. Nao exige autenticacao.
@@ -47,6 +48,7 @@ router.use('/households', householdRoutes);
 router.use('/tasks', taskRoutes);
 router.use('/occurrences', occurrenceRoutes);
 router.use('/executions', executionRoutes);
+router.use('/reminders', reminderRoutes);
 router.use('/me', meRoutes);
 
 module.exports = router;

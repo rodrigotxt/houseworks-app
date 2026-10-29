@@ -50,6 +50,10 @@ services:
       # Mesmo domínio do front: na prática o CORS nunca é exercitado, mas o valor fica
       # certo para o caso de algum cliente externo (app, script) aparecer.
       ALLOWED_ORIGINS: https://${DOMAIN}
+      # Web Push. Sem estas chaves o canal push fica desligado (o in_app continua).
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:contato@houseworks.local}
     expose:
       - '3000'
     depends_on:

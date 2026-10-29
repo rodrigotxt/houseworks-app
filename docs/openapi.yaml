@@ -15,6 +15,8 @@ info:
     Uma **Task** é um dever recorrente da casa; o motor de recorrência materializa **TaskOccurrence**
     (uma obrigação concreta, com data e responsável); concluir uma ocorrência cria uma **TaskExecution**,
     que entra em `pending_review` até que **outro** membro a avalie — é a avaliação que gera os pontos.
+    Um **Reminder** é um aviso (não um dever): ele gera **ReminderFiring** (disparos materializados) e
+    **ReminderDelivery** (uma notificação por destinatário). Nada de pontos, nada de nota.
 
     ## Papéis e capacidades
 
@@ -26,6 +28,7 @@ info:
     | Avaliar execução de outro membro | sim | sim | não |
     | Desfazer execução de outro membro | sim | não | não |
     | Gerenciar membros e papéis | sim | não | não |
+    | Criar lembrete para qualquer membro (inclusive todos) | sim | sim | não — apenas para si |
     | Ver agenda, estatísticas e ranking da casa | sim | sim | sim |
 
     Capacidades individuais podem sobrepor o papel via `Membership.capabilities`.
@@ -73,6 +76,14 @@ tags:
     description: Execuções e avaliação por outro membro.
   - name: Stats
     description: Desempenho, ranking e pontuação ("Desempenho").
+  - name: Reminders
+    description: |
+      Lembretes da casa: avisos recorrentes ou de disparo único, com hora, destinatários e canais.
+      Diferente da tarefa, o lembrete não gera ponto nem avaliação — ele só precisa chegar na hora.
+  - name: Notifications
+    description: Caixa de notificações do usuário — o que os lembretes já dispararam para ele.
+  - name: Push
+    description: Inscrições de Web Push (PWA) por aparelho — o transporte do canal `push`.
 
 security:
   - cookieAuth: []
@@ -1447,6 +1458,412 @@ paths:
         '403':
           $ref: '#/components/responses/NotMember'
 
+  # -------------------------------------------------------------- lembretes
+
+  /households/{householdId}/reminders:
+    get:
+      tags: [Reminders]
+      summary: Lembretes da casa
+      description: |
+        Lembretes da casa, ordenados por criação (mais novo primeiro). Sem `status`, lista apenas
+        os ativos. Quem não tem `canManageReminders` vê somente o que criou ou recebe.
+      operationId: listReminders
+      parameters:
+        - $ref: '#/components/parameters/HouseholdId'
+        - name: status
+          in: query
+          description: 'all inclui ativos, pausados e arquivados.'
+          schema:
+            type: string
+            enum: [active, paused, archived, all]
+            default: active
+        - name: recipient
+          in: query
+          description: Restringe aos lembretes que uma pessoa recebe. `me` é o próprio usuário.
+          schema:
+            type: string
+            example: me
+        - name: task
+          in: query
+          description: Restringe aos lembretes vinculados a uma tarefa.
+          schema:
+            type: string
+        - name: q
+          in: query
+          description: Busca no título.
+          schema:
+            type: string
+            minLength: 2
+        - $ref: '#/components/parameters/Sort'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Lembretes da casa.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Reminder'
+                  meta:
+                    $ref: '#/components/schemas/PageMeta'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/NotMember'
+
+    post:
+      tags: [Reminders]
+      summary: Criar lembrete
+      description: |
+        Cria um lembrete e materializa os próximos disparos na hora.
+
+        **Quem pode o quê:** `owner`/`adult` (capacidade `canManageReminders`) criam para
+        qualquer membro e para todos; `child` cria apenas para si mesma. Todo destinatário
+        precisa ser membro da casa.
+
+        Um canal indisponível nesta instalação (hoje: `email` e `sms`) é recusado com
+        `CHANNEL_NOT_AVAILABLE` — melhor recusar do que aceitar um aviso que nunca sai.
+      operationId: createReminder
+      parameters:
+        - $ref: '#/components/parameters/HouseholdId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateReminderRequest'
+      responses:
+        '201':
+          description: Lembrete criado.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Reminder'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/InsufficientRole'
+
+  /reminders/{reminderId}:
+    get:
+      tags: [Reminders]
+      summary: Detalhe do lembrete
+      description: Inclui o próximo disparo e a minha última notificação deste lembrete.
+      operationId: getReminder
+      parameters:
+        - $ref: '#/components/parameters/ReminderId'
+      responses:
+        '200':
+          description: Lembrete.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Reminder'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    patch:
+      tags: [Reminders]
+      summary: Atualizar lembrete
+      description: |
+        Qualquer mudança que afete a entrega (horário, destinatários, canais, tarefa) vale do
+        próximo disparo em diante: os disparos futuros são recalculados, os já entregues ficam.
+      operationId: updateReminder
+      parameters:
+        - $ref: '#/components/parameters/ReminderId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateReminderRequest'
+      responses:
+        '200':
+          description: Lembrete atualizado.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Reminder'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/InsufficientRole'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags: [Reminders]
+      summary: Arquivar (padrão) ou excluir o lembrete
+      description: |
+        Sem `hard`, arquiva — o histórico de notificações continua. Com `hard=true`, apaga o
+        lembrete, os disparos e as notificações; exige papel `owner`.
+      operationId: deleteReminder
+      parameters:
+        - $ref: '#/components/parameters/ReminderId'
+        - name: hard
+          in: query
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '204':
+          description: Arquivado ou excluído.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/InsufficientRole'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /reminders/{reminderId}/ack:
+    post:
+      tags: [Reminders]
+      summary: Marcar como feito
+      description: |
+        Marca a última notificação deste lembrete para mim como vista e resolvida. Não interrompe
+        a recorrência: o remédio das 21h continua valendo amanhã. Só quem recebe pode.
+      operationId: acknowledgeReminder
+      parameters:
+        - $ref: '#/components/parameters/ReminderId'
+      responses:
+        '200':
+          description: Notificação atualizada.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ReminderNotification'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/InsufficientRole'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /reminders/{reminderId}/snooze:
+    post:
+      tags: [Reminders]
+      summary: Adiar o lembrete
+      description: Cria um disparo avulso, só para quem pediu, daqui a N minutos.
+      operationId: snoozeReminder
+      parameters:
+        - $ref: '#/components/parameters/ReminderId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SnoozeReminderRequest'
+      responses:
+        '201':
+          description: Disparo adiado.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ReminderFiring'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/InsufficientRole'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ---------------------------------------------------------- notificações
+
+  /me/notifications:
+    get:
+      tags: [Notifications]
+      summary: Minhas notificações
+      description: O que os lembretes já dispararam para mim, mais novo primeiro.
+      operationId: listMyNotifications
+      parameters:
+        - name: unread
+          in: query
+          description: 'true só as não lidas; false só as lidas.'
+          schema:
+            type: string
+            enum: ['true', 'false']
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Minhas notificações.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ReminderNotification'
+                  meta:
+                    $ref: '#/components/schemas/PageMeta'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+
+  /me/notifications/{deliveryId}/read:
+    post:
+      tags: [Notifications]
+      summary: Marcar notificação como lida
+      operationId: markNotificationRead
+      parameters:
+        - $ref: '#/components/parameters/DeliveryId'
+      responses:
+        '200':
+          description: Notificação atualizada.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ReminderNotification'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ------------------------------------------------------------------ push
+
+  /me/push/config:
+    get:
+      tags: [Push]
+      summary: Configuração de push
+      description: |
+        Devolve a chave pública VAPID que o navegador usa em `pushManager.subscribe`. Com
+        `enabled: false`, o canal `push` não existe nesta instalação e o app usa só o in_app.
+      operationId: getPushConfig
+      responses:
+        '200':
+          description: Configuração.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/PushConfig'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+
+  /me/push/subscriptions:
+    get:
+      tags: [Push]
+      summary: Meus aparelhos inscritos
+      operationId: listPushSubscriptions
+      responses:
+        '200':
+          description: Inscrições do usuário.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PushSubscription'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+
+    post:
+      tags: [Push]
+      summary: Inscrever este aparelho
+      description: |
+        Idempotente por `endpoint`: inscrever de novo atualiza as chaves. Se o mesmo navegador
+        tiver trocado de conta, a inscrição passa para o novo usuário.
+      operationId: subscribePush
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePushSubscriptionRequest'
+      responses:
+        '200':
+          description: Inscrição atualizada.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/PushSubscription'
+        '201':
+          description: Inscrição criada.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/PushSubscription'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+
+    delete:
+      tags: [Push]
+      summary: Remover a inscrição deste aparelho
+      description: Idempotente; o aparelho é identificado pelo `endpoint`.
+      operationId: unsubscribePush
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeletePushSubscriptionRequest'
+      responses:
+        '204':
+          description: Removida (ou já não existia).
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+
 components:
 
   securitySchemes:
@@ -1498,6 +1915,22 @@ components:
       schema:
         type: string
         example: 66f1a2b3c4d5e6f7a8b9c0d3
+    ReminderId:
+      name: reminderId
+      in: path
+      required: true
+      description: Identificador do lembrete.
+      schema:
+        type: string
+        example: 66f1a2b3c4d5e6f7a8b9c0d5
+    DeliveryId:
+      name: deliveryId
+      in: path
+      required: true
+      description: Identificador de uma notificação (entrega de lembrete).
+      schema:
+        type: string
+        example: 66f1a2b3c4d5e6f7a8b9c0d6
     MemberUserId:
       name: userId
       in: path
@@ -1730,6 +2163,11 @@ components:
         - OCCURRENCE_NOT_COMPLETED
         - OCCURRENCE_NOT_ASSIGNED_TO_YOU
         - EXECUTION_NOT_FOUND
+        - REMINDER_NOT_FOUND
+        - DELIVERY_NOT_FOUND
+        - REMINDER_NOT_ASSIGNED_TO_YOU
+        - CHANNEL_NOT_AVAILABLE
+        - PUSH_NOT_CONFIGURED
         - EXECUTION_ALREADY_RATED
         - CANNOT_RATE_OWN_EXECUTION
         - RATING_WINDOW_CLOSED
@@ -1922,7 +2360,7 @@ components:
         capabilities:
           type: object
           description: Capacidades efetivas (o papel define o padrão; estes campos permitem exceções pontuais).
-          required: [canAssign, canRate, canManageTasks, canManageMembers]
+          required: [canAssign, canRate, canManageTasks, canManageMembers, canManageReminders]
           properties:
             canAssign:
               type: boolean
@@ -1932,6 +2370,11 @@ components:
               type: boolean
             canManageMembers:
               type: boolean
+            canManageReminders:
+              type: boolean
+              description: |
+                Administrar lembretes de QUALQUER membro (e criar para todos). Sem esta
+                capacidade, a pessoa ainda cria e edita os próprios lembretes, só para si.
         joinedAt:
           type: string
           format: date-time
@@ -2816,3 +3259,405 @@ components:
           maxLength: 500
           description: Comentário do avaliador.
           example: Ficou ótimo, obrigado!
+
+    # ----------------------------------------------------------- lembrete
+
+    ReminderChannel:
+      type: string
+      description: |
+        Canal de entrega. in_app é sempre possível (a caixa de notificações do app).
+        push é Web Push do PWA. email e sms estão reservados: o contrato já os conhece,
+        mas hoje são recusados com CHANNEL_NOT_AVAILABLE.
+      enum: [in_app, push, email, sms]
+
+    ReminderSchedule:
+      type: object
+      description: |
+        Quando o lembrete toca. Reaproveita a mesma expansão de recorrência das tarefas
+        (frequency, interval, weekdays, dayOfMonth, startDate, endDate) e acrescenta a
+        HORA local da casa. "ocasional" é o disparo único.
+      required: [frequency, startDate, time]
+      properties:
+        frequency:
+          type: string
+          enum: [diaria, semanal, mensal, anual, ocasional]
+          description: |
+            Mesma semântica de Recurrence.frequency. "ocasional" dispara uma única vez, em
+            startDate, e o lembrete é arquivado depois de tocar.
+          example: diaria
+        interval:
+          type: integer
+          minimum: 1
+          maximum: 52
+          default: 1
+          example: 1
+        weekdays:
+          type: array
+          description: 'Dias da semana (0 = domingo). Obrigatório no semanal.'
+          items:
+            type: integer
+            minimum: 0
+            maximum: 6
+          example: [1, 3, 5]
+        dayOfMonth:
+          type: integer
+          minimum: 1
+          maximum: 31
+          description: 'Dia do mês no mensal/anual. Sem ele, vale o dia de startDate.'
+          example: 5
+        startDate:
+          type: string
+          pattern: '^\d{4}-\d{2}-\d{2}$'
+          example: '2025-07-10'
+        endDate:
+          type: string
+          pattern: '^\d{4}-\d{2}-\d{2}$'
+          description: Opcional. Depois dela o lembrete para de tocar.
+        time:
+          type: string
+          pattern: '^([01]\d|2[0-3]):[0-5]\d$'
+          description: Hora local da casa, 24 horas.
+          example: '21:00'
+
+    ReminderTaskRef:
+      type: object
+      description: Referência curta à tarefa vinculada (quando o lembrete é "conferir se foi feito").
+      required: [id, name, status]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        status:
+          type: string
+          enum: [active, archived]
+
+    Reminder:
+      type: object
+      description: Aviso agendado da casa. Não gera ponto, execução nem nota.
+      required: [id, householdId, title, createdBy, schedule, recipients, allMembers, channels, skipIfTaskDone, status, nextFireAt, createdAt]
+      properties:
+        id:
+          type: string
+        householdId:
+          type: string
+        title:
+          type: string
+          minLength: 3
+          maxLength: 100
+          example: Tomar o remédio
+        notes:
+          type: string
+          maxLength: 500
+          example: Depois do jantar, com um copo de água.
+        createdBy:
+          $ref: '#/components/schemas/UserRef'
+        schedule:
+          $ref: '#/components/schemas/ReminderSchedule'
+        recipients:
+          type: array
+          description: Quem recebe. Vazio quando allMembers é true.
+          items:
+            $ref: '#/components/schemas/UserRef'
+        allMembers:
+          type: boolean
+          description: |
+            Todos os membros, resolvidos NO MOMENTO DO DISPARO: quem entrar depois passa a
+            receber, quem sair para de receber.
+        channels:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReminderChannel'
+        task:
+          description: Tarefa vinculada — o lembrete vira "conferir se já foi feito".
+          oneOf:
+            - $ref: '#/components/schemas/ReminderTaskRef'
+            - type: 'null'
+        skipIfTaskDone:
+          type: boolean
+          description: |
+            Com tarefa vinculada, não dispara quando a ocorrência daquele dia já está done
+            ou skipped. Padrão true.
+        status:
+          type: string
+          enum: [active, paused, archived]
+          default: active
+        nextFireAt:
+          description: Próximo disparo, em UTC. null quando não há mais disparo previsto.
+          oneOf:
+            - type: string
+              format: date-time
+            - type: 'null'
+        archivedAt:
+          oneOf:
+            - type: string
+              format: date-time
+            - type: 'null'
+        myDelivery:
+          description: Minha última notificação deste lembrete. Só no detalhe (GET /reminders/{id}).
+          oneOf:
+            - $ref: '#/components/schemas/ReminderNotification'
+            - type: 'null'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    ReminderSummary:
+      type: object
+      description: Resumo do lembrete dentro de uma notificação.
+      required: [id, title, schedule, channels, status]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        notes:
+          type: string
+        schedule:
+          $ref: '#/components/schemas/ReminderSchedule'
+        channels:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReminderChannel'
+        status:
+          type: string
+          enum: [active, paused, archived]
+
+    ReminderChannelResult:
+      type: object
+      description: O que aconteceu com um canal naquela entrega.
+      required: [channel, status]
+      properties:
+        channel:
+          $ref: '#/components/schemas/ReminderChannel'
+        status:
+          type: string
+          enum: [sent, skipped, failed]
+        sentAt:
+          oneOf:
+            - type: string
+              format: date-time
+            - type: 'null'
+        reason:
+          type: string
+          description: 'Motivo curto quando não foi enviado: sem_inscricao, push_nao_configurado, canal_indisponivel.'
+          example: sem_inscricao
+
+    ReminderNotification:
+      type: object
+      description: |
+        Uma entrega de lembrete para uma pessoa — a unidade da caixa de notificações.
+        readAt (viu) e acknowledgedAt (resolveu) são diferentes de propósito.
+      required: [id, reminder, channels, createdAt]
+      properties:
+        id:
+          type: string
+        reminder:
+          $ref: '#/components/schemas/ReminderSummary'
+        channels:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReminderChannelResult'
+        readAt:
+          oneOf:
+            - type: string
+              format: date-time
+            - type: 'null'
+        acknowledgedAt:
+          oneOf:
+            - type: string
+              format: date-time
+            - type: 'null'
+        createdAt:
+          type: string
+          format: date-time
+
+    ReminderFiring:
+      type: object
+      description: Um disparo materializado (agendado, entregue, pulado ou adiado).
+      required: [id, reminderId, fireAt, localDate, localTime, kind, status]
+      properties:
+        id:
+          type: string
+        reminderId:
+          type: string
+        fireAt:
+          type: string
+          format: date-time
+        localDate:
+          type: string
+          pattern: '^\d{4}-\d{2}-\d{2}$'
+        localTime:
+          type: string
+          pattern: '^([01]\d|2[0-3]):[0-5]\d$'
+        kind:
+          type: string
+          enum: [schedule, snooze]
+        status:
+          type: string
+          enum: [scheduled, processing, delivered, skipped, cancelled, missed]
+        reason:
+          oneOf:
+            - type: string
+            - type: 'null'
+          example: tarefa_concluida
+        deliveredAt:
+          oneOf:
+            - type: string
+              format: date-time
+            - type: 'null'
+        createdAt:
+          type: string
+          format: date-time
+
+    CreateReminderRequest:
+      type: object
+      required: [title, schedule]
+      properties:
+        title:
+          type: string
+          minLength: 3
+          maxLength: 100
+          example: Tomar o remédio
+        notes:
+          type: string
+          maxLength: 500
+          example: Depois do jantar.
+        schedule:
+          $ref: '#/components/schemas/ReminderSchedule'
+        recipients:
+          type: array
+          description: 'Quem recebe. Omitido, o lembrete é para quem cria. Proibido junto com allMembers.'
+          minItems: 1
+          maxItems: 50
+          items:
+            type: string
+        allMembers:
+          type: boolean
+          default: false
+          description: 'Todos os membros da casa. Só quem tem canManageReminders pode usar.'
+        channels:
+          type: array
+          default: [in_app]
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/ReminderChannel'
+        task:
+          description: Tarefa vinculada (opcional).
+          oneOf:
+            - type: string
+            - type: 'null'
+        skipIfTaskDone:
+          type: boolean
+          default: true
+
+    UpdateReminderRequest:
+      type: object
+      description: Ao menos um campo. Desligar allMembers exige informar recipients.
+      properties:
+        title:
+          type: string
+          minLength: 3
+          maxLength: 100
+        notes:
+          type: string
+          maxLength: 500
+        schedule:
+          $ref: '#/components/schemas/ReminderSchedule'
+        recipients:
+          type: array
+          minItems: 1
+          maxItems: 50
+          items:
+            type: string
+        allMembers:
+          type: boolean
+        channels:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/ReminderChannel'
+        task:
+          oneOf:
+            - type: string
+            - type: 'null'
+        skipIfTaskDone:
+          type: boolean
+        status:
+          type: string
+          enum: [active, paused, archived]
+
+    SnoozeReminderRequest:
+      type: object
+      required: [minutes]
+      properties:
+        minutes:
+          type: integer
+          minimum: 1
+          maximum: 1440
+          example: 15
+
+    # --------------------------------------------------------------- push
+
+    PushConfig:
+      type: object
+      required: [enabled]
+      properties:
+        enabled:
+          type: boolean
+          description: |
+            O canal push existe nesta instalação? Depende de VAPID_PUBLIC_KEY e
+            VAPID_PRIVATE_KEY no servidor. Sem elas, o app segue com o canal in_app.
+        publicKey:
+          oneOf:
+            - type: string
+            - type: 'null'
+          description: Chave pública VAPID (applicationServerKey) para o pushManager.subscribe.
+
+    PushSubscription:
+      type: object
+      required: [id, endpoint, createdAt]
+      properties:
+        id:
+          type: string
+        endpoint:
+          type: string
+          format: uri
+        userAgent:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        lastSeenAt:
+          type: string
+          format: date-time
+
+    CreatePushSubscriptionRequest:
+      type: object
+      required: [endpoint, keys]
+      properties:
+        endpoint:
+          type: string
+          format: uri
+        keys:
+          type: object
+          required: [p256dh, auth]
+          properties:
+            p256dh:
+              type: string
+            auth:
+              type: string
+        userAgent:
+          type: string
+          maxLength: 300
+
+    DeletePushSubscriptionRequest:
+      type: object
+      required: [endpoint]
+      properties:
+        endpoint:
+          type: string
+          format: uri

@@ -37,6 +37,17 @@ export type OccurrenceStatus = TaskOccurrence['status'];
 export type TaskExecution = Schemas['TaskExecution'];
 export type ExecutionStatus = TaskExecution['status'];
 
+// ---- lembrete ----
+export type Reminder = Schemas['Reminder'];
+export type ReminderSchedule = Schemas['ReminderSchedule'];
+export type ReminderChannel = Schemas['ReminderChannel'];
+export type ReminderStatus = Reminder['status'];
+export type ReminderNotification = Schemas['ReminderNotification'];
+export type ReminderChannelResult = ReminderNotification['channels'][number];
+export type ReminderFiring = Schemas['ReminderFiring'];
+export type PushConfig = Schemas['PushConfig'];
+export type PushSubscription = Schemas['PushSubscription'];
+
 // ---- desempenho ----
 export type HouseholdStats = Schemas['HouseholdStats'];
 export type MemberStats = Schemas['MemberStats'];
@@ -59,6 +70,9 @@ export type UpdateTaskRequest = Schemas['UpdateTaskRequest'];
 export type CompleteOccurrenceRequest = Schemas['CompleteOccurrenceRequest'];
 export type SkipOccurrenceRequest = Schemas['SkipOccurrenceRequest'];
 export type RateExecutionRequest = Schemas['RateExecutionRequest'];
+export type CreateReminderRequest = Schemas['CreateReminderRequest'];
+export type UpdateReminderRequest = Schemas['UpdateReminderRequest'];
+export type CreatePushSubscriptionRequest = Schemas['CreatePushSubscriptionRequest'];
 
 // ---- utilitarios ----
 export type PageMeta = Schemas['PageMeta'];

@@ -9,11 +9,17 @@
 
 const cron = require('node-cron');
 const { runDailyJob } = require('../services/occurrences');
+const { runReminderJob } = require('../services/reminders');
 
 // 03:00 no fuso da operacao: fora do horario de uso e depois da virada do dia.
 const DEFAULT_SCHEDULE = '0 3 * * *';
 
+// Lembretes: de minuto em minuto. A janela de entrega e curta (10 min), entao um
+// intervalo maior perderia avisos — e "tomar o remedio as 21h" nao pode chegar 21h40.
+const DEFAULT_REMINDER_SCHEDULE = '* * * * *';
+
 let scheduled = null;
+let reminderJob = null;
 
 function startScheduler() {
   if (scheduled) {
@@ -54,6 +60,53 @@ function startScheduler() {
 
   console.log('[scheduler] geracao de ocorrencias agendada para "' + expression + '" (' + timezone + ')');
 
+  const reminderExpression = process.env.REMINDERS_CRON || DEFAULT_REMINDER_SCHEDULE;
+
+  if (!cron.validate(reminderExpression)) {
+    console.error(
+      '[scheduler] expressao cron de lembretes invalida: ' + reminderExpression + ' — job nao agendado'
+    );
+  } else {
+    reminderJob = cron.schedule(
+      reminderExpression,
+      async () => {
+        try {
+          const summary = await runReminderJob();
+
+          // Silencio quando nada aconteceu: um log por minuto, para sempre, e ruido.
+          if (
+            summary.delivered > 0 ||
+            summary.skipped > 0 ||
+            summary.cancelled > 0 ||
+            summary.missed > 0 ||
+            summary.failures > 0
+          ) {
+            console.log(
+              '[scheduler] lembretes: ' +
+                summary.delivered +
+                ' entregues, ' +
+                summary.skipped +
+                ' pulados, ' +
+                summary.cancelled +
+                ' cancelados, ' +
+                summary.missed +
+                ' perdidos, ' +
+                summary.failures +
+                ' falhas'
+            );
+          }
+        } catch (error) {
+          console.error('[scheduler] falha ao despachar lembretes:', error);
+        }
+      },
+      { timezone }
+    );
+
+    console.log(
+      '[scheduler] despacho de lembretes agendado para "' + reminderExpression + '"'
+    );
+  }
+
   return scheduled;
 }
 
@@ -61,6 +114,11 @@ function stopScheduler() {
   if (scheduled) {
     scheduled.stop();
     scheduled = null;
+  }
+
+  if (reminderJob) {
+    reminderJob.stop();
+    reminderJob = null;
   }
 }
 

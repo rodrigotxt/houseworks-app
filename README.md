@@ -1,7 +1,8 @@
 # HouseWorks
 
 Gestão de tarefas domésticas para uma família: a casa divide as tarefas, alguém executa e
-**outro membro confere e dá a nota**.
+**outro membro confere e dá a nota**. Também há **lembretes** — avisos recorrentes ou de
+disparo único (o remédio das 21h, a roupa que já pode lavar), por notificação no app e push.
 
 | | |
 |---|---|
@@ -75,7 +76,7 @@ cd backend && npm install && npm run dev
 ## Testes
 
 ```bash
-cd backend && npm test            # 187 testes, ~3 min
+cd backend && npm test            # 251 testes, ~2 min
 npx @redocly/cli lint docs/openapi.yaml
 ```
 
@@ -129,9 +130,10 @@ O Komodo filtra o webhook pela branch configurada na Stack (`main`). Foi verific
 
 ## Estado
 
-Todas as seis fases do [roadmap](./docs/ROADMAP.md) estão concluídas e **as 38 operações do
-contrato respondem** — verificado batendo em cada rota declarada. 229 testes verdes, em 14 suítes,
+Todas as seis fases do [roadmap](./docs/ROADMAP.md) estão concluídas e **as 51 operações do
+contrato respondem** — verificado batendo em cada rota declarada. 251 testes verdes, em 15 suítes,
 mais 30 de unidade no frontend (`make test-front`).
 
-A interface já cobre Tarefas, Agenda e Desempenho, além do painel da TV. O que ainda falta está
-listado no fim do [README do frontend](./frontend/README.md).
+A interface já cobre Tarefas, Agenda, Desempenho **e Lembretes** (com Web Push no PWA), além do
+painel da TV. O que ainda falta está listado no fim do
+[README do frontend](./frontend/README.md).
