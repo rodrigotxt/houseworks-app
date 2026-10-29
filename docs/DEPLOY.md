@@ -65,6 +65,7 @@ Edite o `.env.prod`:
 | `MONGO_USER`, `MONGO_PASSWORD`, `MONGO_DB_NAME` | credenciais do banco — **gere uma senha nova** |
 | `JWT_SECRET_KEY` | **gere um segredo novo**; nunca reaproveite o de desenvolvimento |
 | `JWT_EXPIRES_IN` | validade do token em segundos (padrão 3600) |
+| `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | opcionais; habilitam o canal **push** dos lembretes (§ 3.1) |
 
 Gere os segredos e cole no arquivo:
 
@@ -72,6 +73,57 @@ Gere os segredos e cole no arquivo:
 node -e "console.log(require('crypto').randomBytes(18).toString('base64url'))"   # senha do Mongo
 node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"         # JWT_SECRET_KEY
 ```
+
+
+### 3.1 Web Push dos lembretes (opcional)
+
+O canal `push` dos lembretes só existe com um par **VAPID**. Sem ele o deploy sobe
+normalmente e os lembretes continuam chegando pela caixa do app (`in_app`); a tela de
+lembretes avisa que o push está indisponível.
+
+Gere o par **uma vez** e guarde-o (trocar depois invalida as inscrições dos aparelhos):
+
+```bash
+cd backend && npx --no-install web-push generate-vapid-keys
+```
+
+Ou, com a stack no ar, dentro do container que já tem a dependência:
+
+```bash
+docker compose -f docker-compose.prod.yml --env-file .env.prod \
+  exec backend node -e "console.log(require('web-push').generateVAPIDKeys())"
+```
+
+Cole no `.env.prod`, uma linha por chave, **sem aspas** e sem quebrar a linha:
+
+```dotenv
+VAPID_PUBLIC_KEY=BNN...
+VAPID_PRIVATE_KEY=fNZ...
+VAPID_SUBJECT=mailto:voce@seudominio.com
+```
+
+Aplique recriando o backend — não é preciso rebuild, e `restart` **não** recarrega
+variável de ambiente:
+
+```bash
+docker compose -f docker-compose.prod.yml --env-file .env.prod \
+  up -d --force-recreate backend
+```
+
+Confira sem imprimir a chave privada:
+
+```bash
+docker compose -f docker-compose.prod.yml --env-file .env.prod \
+  exec backend node -e "console.log((process.env.VAPID_PUBLIC_KEY||'').length, (process.env.VAPID_PRIVATE_KEY||'').length)"
+# esperado: 87 43
+```
+
+`GET /api/v1/me/push/config` passa a responder `{"data":{"enabled":true,"publicKey":"..."}}`.
+A privada nunca sai do servidor; a pública é entregue ao navegador por essa rota. No iPhone, o
+push só funciona com o app instalado na Tela de Início (iOS 16.4+).
+
+> Usando o arranjo do § 8, troque `-f docker-compose.prod.yml` por
+> `-f docker-compose.proxy.yml` nos comandos acima.
 
 ```bash
 # 3. Subir
@@ -165,6 +217,7 @@ arquivo **fora da VPS** — backup no mesmo disco não protege contra a perda do
 | `/api/v1/` responde 404 em tudo | No `Caddyfile` a diretiva precisa ser `handle` e não `handle_path` — o prefixo `/api` é preservado de propósito |
 | Sessão cai sozinha a cada hora | **Não deveria mais acontecer.** O token dura 1h, mas o `middleware.ts` do front renova a sessão antes do render. Se acontecer, o middleware não alcançou a API — confira `API_INTERNAL_URL` no container do front |
 | Sessão cai depois de 30 dias sem usar | Esperado: é a janela de `SESSION_MAX_AGE`. Abrir o app dentro dela renova e o prazo corre de novo |
+| Push dos lembretes não chega | `VAPID_*` ausente/vazia no Environment da Stack, ou o app aberto fora de HTTPS. No iPhone, o PWA precisa estar instalado na Tela de Início |
 
 > **Como a sessão se mantém, em uma frase:** o token dura 1 hora, o cookie dura 30 dias, e o
 > `middleware.ts` troca o token por um novo antes de cada render que precise — sem passar pelo
@@ -212,6 +265,71 @@ Em vez de manter `MONGO_PASSWORD` e `JWT_SECRET_KEY` em texto no `.env.prod` da 
 
 O valor não aparece em log nem em update, e não é legível por usuário não-admin. O `.env.prod`
 deixa de ser a cópia mais valiosa do servidor.
+
+
+### Web Push no Komodo
+
+O campo `environment` da Stack é o conteúdo do `.env` que o Komodo escreve antes do
+deploy. Para habilitar o push:
+
+1. Stack → **Environment** → acrescente ao final:
+
+   ```dotenv
+   VAPID_PUBLIC_KEY=...
+   VAPID_PRIVATE_KEY=...
+   VAPID_SUBJECT=mailto:voce@seudominio.com
+   ```
+
+2. **Save/Update Stack** e **Deploy**. O Komodo reescreve o `.env` e recria o backend.
+
+Se preferir não deixar a privada em texto no Environment, crie `VAPID_PRIVATE_KEY` em
+*Settings → Variables* marcada como **secret** e interpole:
+
+```dotenv
+VAPID_PRIVATE_KEY = [[VAPID_PRIVATE_KEY]]
+```
+
+Gerar o par com a stack no ar:
+
+```bash
+docker compose -p <nome-da-stack> exec backend \
+  node -e "console.log(require('web-push').generateVAPIDKeys())"
+```
+
+> **Não edite o `.env` da stack por SSH para isso.** O próximo deploy sobrescreve o
+> arquivo; a fonte de verdade é o Environment da Stack.
+
+#### Sem interface (CLI/API)
+
+O CLI `km` vem na imagem do Core. Como o login do admin exige TOTP, o caminho para
+automação é criar uma **API key temporária** direto no banco (modo padrão do CLI):
+
+```bash
+docker exec komodo-core-1 km create api-key --for admin dsh-temp
+# devolve {"key":"K_...","secret":"S_..."}
+```
+
+Com ela, use os headers `X-Api-Key` / `X-Api-Secret` na API do Core:
+
+| Ação | Chamada |
+|---|---|
+| Ler a stack | `POST /read/GetStack` `{"stack":"houseworks"}` |
+| Atualizar o environment | `POST /write/UpdateStack` `{"id":"...","config":{"environment":"..."}}` |
+| Disparar o deploy | `POST /execute/DeployStack` `{"stack":"houseworks"}` |
+
+A API é a mesma que o painel usa; o OpenAPI completo fica em `/docs` do Core. **Apague a
+chave temporária** depois (*Settings → API Keys* no painel).
+
+#### Conferindo
+
+No container do backend da stack:
+
+```bash
+docker exec <stack>-backend-1 node -e \
+  "const p=require('./services/push'); console.log(p.isConfigured(), p.publicKey().length)"
+# true 87
+```
+
 
 ### Por que o monorepo importa aqui
 
