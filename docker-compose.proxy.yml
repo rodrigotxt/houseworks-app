@@ -49,6 +49,10 @@ services:
       JWT_SECRET: ${JWT_SECRET_KEY}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-3600}
       ALLOWED_ORIGINS: https://${DOMAIN}
+      # Web Push. Sem estas chaves o canal push fica desligado (o in_app continua).
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:contato@houseworks.local}
     expose:
       - '3000'
     depends_on:

@@ -241,6 +241,7 @@ describe('membros', () => {
       canRate: true,
       canManageTasks: true,
       canManageMembers: false,
+      canManageReminders: true,
     });
   });
 
@@ -253,6 +254,7 @@ describe('membros', () => {
       canRate: false,
       canManageTasks: false,
       canManageMembers: false,
+      canManageReminders: false,
     });
   });
 
@@ -286,6 +288,7 @@ describe('membros', () => {
       canRate: true,
       canManageTasks: false,
       canManageMembers: false,
+      canManageReminders: false,
     });
   });
 

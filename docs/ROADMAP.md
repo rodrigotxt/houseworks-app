@@ -2,7 +2,7 @@
 
 > **Estratégia: API First.** O contrato em [`docs/openapi.yaml`](./openapi.yaml) é a fonte de verdade.
 >
-> **Status: as seis fases estão concluídas e a API cobre o contrato inteiro** — as 36 operações
+> **Status: as seis fases estão concluídas e a API cobre o contrato inteiro** — as 51 operações
 > declaradas respondem (verificado batendo em cada rota do `openapi.yaml`; nenhuma cai em
 > `ROUTE_NOT_FOUND`). Todos os problemas do baseline estão resolvidos.
 >
@@ -350,7 +350,7 @@ A API está "100% pronta" quando, para cada rota do contrato:
 
 ## 7. Fora de escopo (pós-MVP)
 
-Notificações push/e-mail · anexos e foto como prova de execução · recompensas e troca de pontos ·
+Notificações por e-mail/SMS (push já existe, via PWA) · anexos e foto como prova de execução · recompensas e troca de pontos ·
 múltiplas casas por usuário na UI · i18n · app mobile nativo · OAuth social.
 
 ---

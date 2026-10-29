@@ -77,6 +77,9 @@ alternativa era descobrir no primeiro login, com `secretOrPrivateKey must have a
 | `RATE_LIMIT_MAX` | `10` | tentativas de login/registro por janela, por IP |
 | `RATE_LIMIT_WINDOW_MS` | `900000` | janela do limite (15 min) |
 | `OCCURRENCES_CRON` | `0 3 * * *` | quando o job diário roda |
+| `REMINDERS_CRON` | `* * * * *` | quando o despachante de lembretes roda |
+| `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` | vazio | chaves de Web Push. Sem elas, o canal `push` fica **desligado** (o `in_app` continua) |
+| `VAPID_SUBJECT` | `mailto:contato@houseworks.local` | contato exigido pelo protocolo VAPID |
 | `TZ` | `America/Sao_Paulo` | fuso do **processo** (usado pelo agendador) |
 
 **Só no `docker-compose.yml`:** `MONGO_USER`, `MONGO_PASSWORD`, `MONGO_DB_NAME` (inicializam o
@@ -183,6 +186,27 @@ que você pode desligá-lo (`OCCURRENCES_CRON` inválido só emite um aviso) sem
 Quando houver mais de uma réplica, o job deve sair para um worker separado. Rodar em N réplicas
 continua **correto** (o índice único garante), apenas redundante.
 
+### Lembretes (a cada minuto)
+
+`runReminderJob()` materializa os próximos 7 dias de cada lembrete ativo e despacha o que
+venceu **nos últimos 10 minutos**. Diferente das ocorrências, aqui **não há backfill do
+passado**: um disparo atrasado mais que isso vira `missed`, porque remédio das 21h entregue
+às 9h é pior que nenhum aviso.
+
+A leitura da lista materializa os disparos (resiliência), mas **quem entrega é o job** — sem
+`REMINDERS_CRON`, nada toca.
+
+O canal `push` depende de `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`. Sem elas, a criação de
+um lembrete com push é recusada com `CHANNEL_NOT_AVAILABLE` e o `in_app` continua
+funcionando. Para gerar as chaves:
+
+```bash
+cd backend && npx web-push generate-vapid-keys
+```
+
+No iPhone, o push só funciona com o PWA **instalado na Tela de Início** (iOS 16.4+). No
+Android e no desktop, basta a permissão do navegador.
+
 ---
 
 ## 9. Problemas comuns
@@ -197,6 +221,8 @@ continua **correto** (o índice único garante), apenas redundante.
 | `429 RATE_LIMITED` durante desenvolvimento | Limite de tentativas. Ajuste `RATE_LIMIT_MAX` ou `RATE_LIMIT_ENABLED=false` |
 | Front recebendo erro de CORS | `ALLOWED_ORIGINS` precisa conter a origem do front |
 | Agenda de uma casa vazia | Nenhuma tarefa `active`, ou `horizonDays` muito baixo |
+| Push não chega | Sem `VAPID_*` no servidor, permissão negada no navegador, ou (iOS) app fora da Tela de Início |
+| Lembrete "não tocou" | Servidor parado há mais de 10 min (vira `missed`), lembrete pausado/arquivado, ou tarefa vinculada já concluída no dia |
 
 ---
 

@@ -12,6 +12,16 @@ process.env.JWT_SECRET = process.env.JWT_SECRET || 'segredo-de-teste-nao-usar-em
 // o app (tests/hardening.test.js).
 process.env.RATE_LIMIT_ENABLED = process.env.RATE_LIMIT_ENABLED || 'false';
 
+// Chaves VAPID efemeras para a suite. Sem elas o canal push fica indisponivel e nao
+// haveria como testar inscricao nem a recusa de um lembrete com push.
+if (!process.env.VAPID_PUBLIC_KEY) {
+  const webpush = require('web-push');
+  const keys = webpush.generateVAPIDKeys();
+
+  process.env.VAPID_PUBLIC_KEY = keys.publicKey;
+  process.env.VAPID_PRIVATE_KEY = keys.privateKey;
+}
+
 const db = require('./helpers/db');
 
 beforeAll(async () => {

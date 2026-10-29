@@ -8,7 +8,10 @@ import { createTransport, type ApiClientOptions } from './client';
 import { authResource } from './resources/auth';
 import { executionsResource } from './resources/executions';
 import { householdsResource } from './resources/households';
+import { notificationsResource } from './resources/notifications';
 import { occurrencesResource } from './resources/occurrences';
+import { pushResource } from './resources/push';
+import { remindersResource } from './resources/reminders';
 import { statsResource } from './resources/stats';
 import { tasksResource } from './resources/tasks';
 
@@ -22,6 +25,9 @@ export function createApiClient(options: ApiClientOptions) {
     occurrences: occurrencesResource(transport),
     executions: executionsResource(transport),
     stats: statsResource(transport),
+    reminders: remindersResource(transport),
+    notifications: notificationsResource(transport),
+    push: pushResource(transport),
   };
 }
 

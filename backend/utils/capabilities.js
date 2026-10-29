@@ -8,12 +8,36 @@
 const ROLES = ['owner', 'adult', 'child'];
 
 const ROLE_CAPABILITIES = {
-  owner: { canAssign: true, canRate: true, canManageTasks: true, canManageMembers: true },
-  adult: { canAssign: true, canRate: true, canManageTasks: true, canManageMembers: false },
-  child: { canAssign: false, canRate: false, canManageTasks: false, canManageMembers: false },
+  owner: {
+    canAssign: true,
+    canRate: true,
+    canManageTasks: true,
+    canManageMembers: true,
+    canManageReminders: true,
+  },
+  adult: {
+    canAssign: true,
+    canRate: true,
+    canManageTasks: true,
+    canManageMembers: false,
+    canManageReminders: true,
+  },
+  child: {
+    canAssign: false,
+    canRate: false,
+    canManageTasks: false,
+    canManageMembers: false,
+    canManageReminders: false,
+  },
 };
 
-const CAPABILITY_NAMES = ['canAssign', 'canRate', 'canManageTasks', 'canManageMembers'];
+const CAPABILITY_NAMES = [
+  'canAssign',
+  'canRate',
+  'canManageTasks',
+  'canManageMembers',
+  'canManageReminders',
+];
 
 // Capacidades efetivas = padrao do papel + sobreposicoes.
 function resolveCapabilities(role, overrides) {

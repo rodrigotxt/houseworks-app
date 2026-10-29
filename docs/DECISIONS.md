@@ -528,6 +528,109 @@ foram **presumidas**. A ficha da tarefa mostra a média e, quando houver presun�
 - **Deduzir o tempo do intervalo entre abrir e concluir.** A pessoa abre a agenda de manhã e
   marca à noite; o número não mediria a tarefa, mediria a distância até o celular.
 
+---
+
+## I. Lembretes
+
+### D37 — O lembrete é um aviso, e ganha modelo próprio
+
+**Contexto.** A tarefa já cobre "algo que precisa ser feito e conferido". Mas "tomar o
+remédio às 21h" não tem nota, não tem ponto e não tem execução — e "conferir se a máquina
+já pode lavar" é um aviso, não um dever.
+
+**Decisão.** `Reminder` é um modelo separado, com `ReminderFiring` (o instante) e
+`ReminderDelivery` (a notificação por pessoa). Ele **reaproveita** a expansão de
+recorrência e o conceito de materialização das tarefas, mas não compartilha a tabela: um
+lembrete nunca entra no placar e nunca vira execução.
+
+**Descartado.**
+
+- **Um tipo especial de `Task`.** O placar, a avaliação e as estatísticas teriam de
+  aprender a ignorar um subconjunto de tarefas em todo lugar — e um erro num desses
+  lugares colocaria um remédio no ranking da casa.
+- **Notificação efêmera, sem histórico.** Não daria para responder "eu já vi isso?" nem
+  "por que não tocou?".
+
+**Consequência.** Duas telas mentais para o usuário — "o que eu tenho de fazer" e "do que
+eu preciso lembrar" —, que é exatamente a distinção que o produto pede.
+
+### D38 — Disparos materializados, sem backfill do passado
+
+**Contexto.** As ocorrências se reconstroem na leitura (D15): se o servidor ficou parado,
+a agenda regenera o que falta. Em lembrete, isso seria um defeito.
+
+**Decisão.** O gerador materializa **7 dias à frente** e **nunca para trás**. O
+despachante entrega apenas o que venceu nos últimos **10 minutos**; o que passou disso vira
+`missed`.
+
+**Motivo.** Um aviso é sensível à hora de um jeito que uma obrigação não é. "Tomar o
+remédio às 21h" entregue às 9h do dia seguinte é pior que nenhum aviso: ele chega quando
+já não serve para nada e ainda faz o usuário desconfiar do sistema.
+
+**Consequência.** Reiniciar o servidor por mais de 10 minutos pode perder um aviso — e
+isso é aceito e registrado, em vez de escondido. O índice único
+`{reminder, fireAt, user}` mantém a entrega idempotente mesmo com duas réplicas.
+
+### D39 — "Feito" e "adiar" são por pessoa, e não desligam a recorrência
+
+**Contexto.** O gesto natural depois de um aviso é "feito". Numa recorrência diária, ele
+não pode significar "cancele o lembrete".
+
+**Decisão.** "Feito" grava `acknowledgedAt` na **entrega** (não no lembrete) e marca
+como lida. "Adiar" cria um `ReminderFiring` do tipo `snooze`, **só para quem pediu**.
+Nenhum dos dois altera a regra.
+
+**Descartado.** — Um `status: done` no lembrete: a primeira pessoa a tomar o remédio
+desligaria o aviso de todo mundo.
+
+**Consequência.** Um lembrete `ocasional` é a exceção: ele se arquiva depois de tocar,
+porque não há "amanhã" para ele.
+
+### D40 — Canais são um registro extensível
+
+**Contexto.** O pedido prevê push agora e e-mail/SMS depois. Implementar os dois primeiros
+com um `if` no despachante deixaria o terceiro caro.
+
+**Decisão.** `services/channels.js` é um registro: cada canal declara `available()` e
+`send()`. `in_app` e `push` estão implementados; `email` e `sms` existem no
+contrato, mas `available()` devolve `false` — e a **criação do lembrete recusa** um canal
+indisponível com `CHANNEL_NOT_AVAILABLE`.
+
+**Motivo.** Aceitar um canal que nunca entrega é pior que recusar: o usuário acharia que
+configurou o aviso.
+
+**Consequência.** Adicionar e-mail é implementar `send()` e virar a flag. Nada de domínio
+muda.
+
+### D41 — Push é por aparelho, não por casa
+
+**Contexto.** A invariante "todo documento de domínio tem `household`" isola as casas.
+Uma inscrição de Web Push não pertence a uma casa: o mesmo celular recebe avisos de duas
+casas, e o navegador mantém **um** endpoint para o aparelho.
+
+**Decisão.** `PushSubscription` fica em nível de **usuário**, como `RevokedToken` —
+documento de identidade/infraestrutura. O endpoint é único; as chaves nunca são
+serializadas; um 404/410 do serviço de push remove a inscrição morta.
+
+**Descartado.** — Uma inscrição por casa: o mesmo aparelho apareceria duas vezes, e o
+serviço de push receberia o mesmo payload duas vezes.
+
+**Consequência.** O "todos" de uma casa continua dinâmico (resolvido no disparo), mas a
+inscrição de cada aparelho é única.
+
+### D42 — Lembrete vinculado a tarefa se cala quando ela já foi feita
+
+**Contexto.** "Me avise de conferir se a tarefa foi feita" é um dos casos pedidos. Avisar
+sempre transformaria o lembrete em ruído justamente quando não há nada a fazer.
+
+**Decisão.** `task` é opcional; com ela, `skipIfTaskDone` (padrão `true`) faz o
+despachante consultar a ocorrência **daquele dia** e pular o disparo quando ela está
+`done` ou `skipped`. O pulo é registrado (`reason: tarefa_concluida`), para não parecer
+falha.
+
+**Consequência.** O lembrete vira uma checagem: só incomoda quando ainda falta.
+
+
 **Consequência.** A comparação fica disponível na ficha da tarefa (estimativa, média real e
 quantas sem medição) e a listagem de execuções ganhou filtro `taskId`, que é o que permite
 buscar o histórico de uma tarefa sem baixar o da casa inteira.
