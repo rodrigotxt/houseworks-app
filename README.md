@@ -134,6 +134,6 @@ Todas as seis fases do [roadmap](./docs/ROADMAP.md) estão concluídas e **as 51
 contrato respondem** — verificado batendo em cada rota declarada. 251 testes verdes, em 15 suítes,
 mais 30 de unidade no frontend (`make test-front`).
 
-A interface já cobre Tarefas, Agenda, Desempenho **e Lembretes** (com Web Push no PWA), além do
-painel da TV. O que ainda falta está listado no fim do
+A interface já cobre Tarefas, Agenda, **Conferir** (a fila de avaliação), Desempenho e
+**Lembretes** (com Web Push no PWA), além do painel da TV. O que ainda falta está listado no fim do
 [README do frontend](./frontend/README.md).

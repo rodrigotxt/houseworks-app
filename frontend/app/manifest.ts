@@ -11,7 +11,9 @@ export default function manifest(): MetadataRoute.Manifest {
     name: 'HouseWorks — tarefas da casa',
     short_name: 'HouseWorks',
     description: 'As tarefas da casa, divididas e acompanhadas.',
-    start_url: '/',
+    // O app abre na agenda. O layout de (app) manda para o login/onboarding quando
+    // ainda não há sessão ou casa.
+    start_url: '/schedule',
     scope: '/',
     display: 'standalone',
     orientation: 'portrait-primary',

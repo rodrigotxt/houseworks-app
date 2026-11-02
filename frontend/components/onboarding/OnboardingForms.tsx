@@ -38,7 +38,7 @@ export default function OnboardingForms({ userName }: { userName: string }) {
 
   function concluir() {
     // O layout lê a casa das memberships; basta recarregar do servidor.
-    router.replace('/tasks');
+    router.replace('/schedule');
     router.refresh();
   }
 

@@ -13,7 +13,7 @@ export const metadata: Metadata = { title: 'Sua casa' };
 export default async function OnboardingPage() {
   const session = await requireSession();
 
-  if (session.memberships.length > 0) redirect('/tasks');
+  if (session.memberships.length > 0) redirect('/schedule');
 
   return <OnboardingForms userName={session.user.name} />;
 }

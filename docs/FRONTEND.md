@@ -138,6 +138,10 @@ desabilitar** botões. O backend continua validando — a UI só evita frustraç
 4. Carregar a tela pedida
 ```
 
+> **A página inicial é o Cronograma (`/schedule`).** A rota `/` só decide o destino: com
+> sessão vai para a agenda; sem sessão, para o login; sem casa, o próprio layout de `(app)`
+> desvia para o onboarding.
+
 > **Se você só está em uma casa, ainda assim guarde o `householdId`** — todas as rotas de dados o
 > exigem no caminho. Um dia o app pode ter mais de uma.
 
@@ -192,6 +196,8 @@ Criar uma tarefa exige `recurrence` (ver [DOMAIN.md § 3](./DOMAIN.md)). **Arqui
 | Desfazer | `POST /occurrences/{occurrenceId}/undo` |
 | Histórico | `GET /occurrences/{occurrenceId}/executions` |
 
+**É a página inicial do app.** Depois do login (ou ao abrir o PWA), o usuário cai aqui.
+
 **Sem `from`/`to`, a janela é de hoje até o horizonte da casa** (30 dias por padrão). Para uma
 visão semanal, mande os dois.
 
@@ -208,6 +214,11 @@ para não ser preciso buscar a tarefa à parte.
 
 O executor **nunca** aparece na própria fila, e `rating` é obrigatório. A lista já vem com
 `executedBy` e `ratedBy` populados.
+
+**No app:** a rota `/review` ("Conferir") implementa essa fila. Cada cartão mostra tarefa,
+quem executou, quando, comentário, pontos e tempo; o botão **Avaliar** abre o diálogo de
+nota 1–5 + comentário. Depois de avaliar, o item sai da fila. Quem não tem `canRate` vê
+uma explicação em vez da lista.
 
 ### Desempenho
 
@@ -375,12 +386,14 @@ mais.
 
 | Rota | O que é |
 |---|---|
+| `/` | Só decide para onde mandar: sessão → `/schedule`; sem sessão → `/login` |
 | `/login`, `/register` | Entrada. O formulário roda no browser; quem grava o cookie é a API |
 | `/onboarding` | Cria a casa, ou entra numa por convite — para quem está logado sem casa |
 | `/tasks` | Lista das tarefas ativas |
 | `/tasks/new`, `/tasks/[taskId]/edit` | Formulário de tarefa |
 | `/tasks/[taskId]` | Detalhe da tarefa |
-| `/schedule` | A agenda do horizonte, com concluir e pular ocorrência |
+| `/schedule` | **A página inicial.** A agenda do horizonte, com concluir e pular ocorrência |
+| `/review` | Fila de conferência: avaliar execuções de outros membros |
 | `/reminders` | Lembretes da casa, notificações pendentes e push do aparelho |
 | `/reminders/new`, `/reminders/[reminderId]/edit` | Formulário de lembrete |
 | `/reminders/[reminderId]` | Detalhe do lembrete |

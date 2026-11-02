@@ -15,7 +15,7 @@ export const metadata: Metadata = { title: 'Criar conta' };
 
 export default async function RegisterPage() {
   // Quem ja esta dentro nao precisa criar conta.
-  if (await getSession()) redirect('/tasks');
+  if (await getSession()) redirect('/schedule');
 
   return <RegisterForm />;
 }

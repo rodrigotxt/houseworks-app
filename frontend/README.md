@@ -39,6 +39,10 @@ lib/
   device/             detecção de tipo de aparelho
 ```
 
+**A página inicial é o Cronograma (`/schedule`)** — a agenda do dia. A rota `/` só decide
+para onde mandar: login, onboarding ou a agenda. O PWA também abre direto em `/schedule`
+(`start_url` do manifest).
+
 ### As três regras que sustentam isso
 
 1. **`lib/domain` é puro.** Sem import de React, MUI ou Next. É o que permite testar as
@@ -117,6 +121,23 @@ sentido. Três decisões que valem saber antes de mexer:
    com a mesma especificidade, e venceria pela ordem de injeção.
 
 **O passo seguinte** é permitir concluir e pular tarefas direto do painel; hoje ele só lê.
+
+---
+
+## Conferir — a fila de avaliação
+
+`/review` é a tela que fecha o ciclo do produto: mostra as execuções de **outros**
+membros esperando nota. Cada cartão traz a tarefa, quem fez, quando, o comentário, os
+pontos e o tempo; o botão **Avaliar** abre o diálogo de nota 1–5 + comentário.
+
+Três regras que a tela respeita:
+
+- **quem executou nunca avalia a própria execução** — a API já filtra a fila;
+- só **owner/adult** (`canRate`) conferem; criança vê uma explicação;
+- sem avaliação em `ratingWindowHours` (72 h por padrão), a execução é **auto-aprovada**.
+
+A nota **não altera os pontos** — ela mede a qualidade. Os pontos já foram creditados na
+conclusão e passam a contar quando a execução é aprovada.
 
 ---
 

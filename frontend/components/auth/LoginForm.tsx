@@ -34,7 +34,7 @@ export default function LoginForm() {
     try {
       // A API grava o cookie httpOnly; não guardamos token nenhum no cliente.
       await getBrowserApi().auth.login({ email, password });
-      router.replace('/tasks');
+      router.replace('/schedule');
       router.refresh();
     } catch (causa) {
       setErro(

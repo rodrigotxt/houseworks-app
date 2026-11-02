@@ -10,7 +10,7 @@ export const metadata: Metadata = { title: 'Entrar' };
 
 export default async function LoginPage() {
   // Já autenticado não precisa ver o formulário.
-  if (await getSession()) redirect('/tasks');
+  if (await getSession()) redirect('/schedule');
 
   return <LoginForm />;
 }
