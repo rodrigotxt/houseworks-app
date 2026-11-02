@@ -42,7 +42,7 @@ import ChangePasswordDialog from '@/components/auth/ChangePasswordDialog';
 import type { DeviceKind } from '@/lib/device/profile';
 import { useSpatialNavigation } from '@/lib/device/useSpatialNavigation';
 import { getBrowserApi } from '@/lib/session/browser';
-import { NAV_ITEMS, activeItem } from './nav';
+import { MOBILE_NAV_ITEMS, NAV_ITEMS, activeItem } from './nav';
 
 const SIDE_WIDTH = { desktop: 248, tv: 320 } as const;
 
@@ -65,6 +65,11 @@ export default function AppShell({
   const pathname = usePathname();
   const atual = activeItem(pathname);
   const isTv = device === 'tv';
+
+  // Telas que saíram da barra inferior e passaram a viver no menu do avatar.
+  const menuNavItems = NAV_ITEMS.filter(
+    (item) => item.href === '/performance' || item.href === '/household'
+  );
   const larguraLateral = isTv ? SIDE_WIDTH.tv : SIDE_WIDTH.desktop;
 
   const [menu, setMenu] = useState<HTMLElement | null>(null);
@@ -134,6 +139,27 @@ export default function AppShell({
                 <Typography variant="caption" color="text.secondary">@{username}</Typography>
               </Box>
             </MenuItem>
+            <Divider />
+
+            {/* Duas telas de consulta que não cabem (nem precisam) na barra inferior. */}
+            {menuNavItems.map((item) => {
+              const Icone = item.icon;
+
+              return (
+                <MenuItem
+                  key={item.href}
+                  selected={atual?.href === item.href}
+                  onClick={() => {
+                    setMenu(null);
+                    router.push(item.href);
+                  }}
+                >
+                  <ListItemIcon><Icone fontSize="small" /></ListItemIcon>
+                  <ListItemText>{item.label}</ListItemText>
+                </MenuItem>
+              );
+            })}
+
             <Divider />
             <MenuItem
               onClick={() => {
@@ -234,7 +260,7 @@ export default function AppShell({
             value={atual?.href ?? false}
             onChange={(_evento, valor) => router.push(String(valor))}
           >
-            {NAV_ITEMS.map((item) => {
+            {MOBILE_NAV_ITEMS.map((item) => {
               const Icone = item.icon;
               return (
                 <BottomNavigationAction
