@@ -426,6 +426,10 @@ cuida só da sessão):
 | `desktop` | navegador | o app completo |
 | `tv` | TV / Android TV | tela cheia, **só leitura**, sem barra de navegação; D-pad substitui o toque |
 
+No **celular**, a barra inferior mostra apenas Tarefas, Cronograma, Conferir e Lembretes.
+Desempenho e Casa saem dela e passam para o **menu do avatar** no topo, junto com trocar
+senha e sair; no desktop/tablet continuam na navegação lateral.
+
 Na TV a navegação espacial é `lib/device/spatial.ts` (geometria pura, testada com
 `npm run test:spatial`), ligada pelo hook `useSpatialNavigation`. O anel de foco mora em
 `globals.css`, sob `html[data-tv]`.

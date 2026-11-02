@@ -1,8 +1,9 @@
 // components/shells/nav.ts
 // As secoes do app, num lugar so.
 //
-// Os tres shells (lateral no desktop, inferior no celular, barra grande na TV) leem
-// daqui — mudar uma secao e mudar uma linha, nao tres arquivos.
+// NAV_ITEMS e a lista completa (lateral do desktop, barra grande da TV). MOBILE_NAV_ITEMS
+// e o recorte da barra inferior: as telas de uso diario, sem Desempenho nem Casa — essas
+// duas vivem no menu do avatar para os rotulos nao apertarem.
 
 import BarChartIcon from '@mui/icons-material/BarChart';
 import GroupsIcon from '@mui/icons-material/Groups';
@@ -27,6 +28,17 @@ export const NAV_ITEMS: NavItem[] = [
   { href: '/performance', label: 'Desempenho', shortLabel: 'Placar', icon: BarChartIcon },
   { href: '/household', label: 'Casa', shortLabel: 'Casa', icon: GroupsIcon },
 ];
+
+/**
+ * O que cabe na barra inferior do celular.
+ *
+ * Desempenho e Casa saíram dela: seis itens apertavam os rótulos e essas duas telas são
+ * de consulta, não de uso diário. Elas continuam no menu do avatar, junto com trocar
+ * senha e sair — e continuam na navegação lateral no desktop/tablet.
+ */
+export const MOBILE_NAV_ITEMS: NavItem[] = NAV_ITEMS.filter(
+  (item) => item.href !== '/performance' && item.href !== '/household'
+);
 
 /** Qual item esta ativo para um caminho. Casa por prefixo para /tasks/123 marcar Tarefas. */
 export function activeItem(pathname: string): NavItem | undefined {

@@ -20,6 +20,10 @@ o chrome em volta. Isso é possível porque os quatro alvos não são igualmente
 | TV | **Entrada**: não existe ponteiro, é controle remoto | Um shell com alvos maiores e sem barra inferior + navegação espacial por D-pad (`lib/device/spatial.ts`) |
 | App nativo de loja | **Runtime** | Fora de escopo — exigiria outro runtime |
 
+No **celular**, a barra inferior tem só as quatro telas de uso diário: Tarefas, Cronograma,
+Conferir e Lembretes. **Desempenho** e **Casa** ficam no menu do avatar, no topo, junto com
+trocar senha e sair — e continuam na navegação lateral no desktop/tablet.
+
 ```
 app/
   (auth)/login/       pública — entrar
