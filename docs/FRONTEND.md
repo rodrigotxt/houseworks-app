@@ -209,6 +209,11 @@ para não ser preciso buscar a tarefa à parte.
 O executor **nunca** aparece na própria fila, e `rating` é obrigatório. A lista já vem com
 `executedBy` e `ratedBy` populados.
 
+**No app:** a rota `/review` ("Conferir") implementa essa fila. Cada cartão mostra tarefa,
+quem executou, quando, comentário, pontos e tempo; o botão **Avaliar** abre o diálogo de
+nota 1–5 + comentário. Depois de avaliar, o item sai da fila. Quem não tem `canRate` vê
+uma explicação em vez da lista.
+
 ### Desempenho
 
 | Ação | Chamada |
@@ -381,6 +386,7 @@ mais.
 | `/tasks/new`, `/tasks/[taskId]/edit` | Formulário de tarefa |
 | `/tasks/[taskId]` | Detalhe da tarefa |
 | `/schedule` | A agenda do horizonte, com concluir e pular ocorrência |
+| `/review` | Fila de conferência: avaliar execuções de outros membros |
 | `/reminders` | Lembretes da casa, notificações pendentes e push do aparelho |
 | `/reminders/new`, `/reminders/[reminderId]/edit` | Formulário de lembrete |
 | `/reminders/[reminderId]` | Detalhe do lembrete |

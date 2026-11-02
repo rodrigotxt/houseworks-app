@@ -120,6 +120,23 @@ sentido. Três decisões que valem saber antes de mexer:
 
 ---
 
+## Conferir — a fila de avaliação
+
+`/review` é a tela que fecha o ciclo do produto: mostra as execuções de **outros**
+membros esperando nota. Cada cartão traz a tarefa, quem fez, quando, o comentário, os
+pontos e o tempo; o botão **Avaliar** abre o diálogo de nota 1–5 + comentário.
+
+Três regras que a tela respeita:
+
+- **quem executou nunca avalia a própria execução** — a API já filtra a fila;
+- só **owner/adult** (`canRate`) conferem; criança vê uma explicação;
+- sem avaliação em `ratingWindowHours` (72 h por padrão), a execução é **auto-aprovada**.
+
+A nota **não altera os pontos** — ela mede a qualidade. Os pontos já foram creditados na
+conclusão e passam a contar quando a execução é aprovada.
+
+---
+
 ## Lembretes e push
 
 `/reminders` é a tela dos avisos da casa, em duas leituras:
