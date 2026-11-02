@@ -39,6 +39,10 @@ lib/
   device/             detecção de tipo de aparelho
 ```
 
+**A página inicial é o Cronograma (`/schedule`)** — a agenda do dia. A rota `/` só decide
+para onde mandar: login, onboarding ou a agenda. O PWA também abre direto em `/schedule`
+(`start_url` do manifest).
+
 ### As três regras que sustentam isso
 
 1. **`lib/domain` é puro.** Sem import de React, MUI ou Next. É o que permite testar as
